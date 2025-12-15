@@ -226,6 +226,7 @@ export default function ChatClient() {
   const [friendId, setFriendId] = useState("");
   const [friendStatus, setFriendStatus] = useState<string | null>(null);
   const [pendingRequests, setPendingRequests] = useState<Array<any>>([]);
+  const [addFriendOpen, setAddFriendOpen] = useState(false);
 
   async function reserveUsername(name: string) {
     if (!user) return setUsernameStatus("Not signed in");
@@ -250,7 +251,7 @@ export default function ChatClient() {
     }
   }
 
-  async function addFriendById(id: string) {
+  async function addFriendById(id: string) : Promise<boolean> {
     if (!user) return setFriendStatus("Not signed in");
     const clean = id.trim().toLowerCase();
     if (!clean) return setFriendStatus("Enter an ID");
@@ -274,9 +275,11 @@ export default function ChatClient() {
         createdAt: serverTimestamp(),
       });
       setFriendStatus("Request sent");
+      return true;
     } catch (e) {
       console.error(e);
       setFriendStatus("Error adding friend");
+      return false;
     }
   }
 
@@ -501,6 +504,23 @@ export default function ChatClient() {
                 style={{ padding: 8, minWidth: 90 }}
               >
                 Settings
+              </button>
+
+              <button
+                aria-label="Add friend"
+                title="Add friend"
+                onClick={() => {
+                  if (!profile?.username) {
+                    setSettingsOpen(true);
+                    setUsernameStatus("Create an ID to add friends");
+                    return;
+                  }
+                  setAddFriendOpen((s) => !s);
+                }}
+                className={styles.sendBtn}
+                style={{ padding: 8, minWidth: 90 }}
+              >
+                Add Friend
               </button>
             </div>
           </header>
