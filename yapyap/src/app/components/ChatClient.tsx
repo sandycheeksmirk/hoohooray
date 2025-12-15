@@ -493,10 +493,34 @@ export default function ChatClient() {
         if (!snap.exists()) throw new Error("no chat");
         const g = (snap.data() as any).game;
         if (!g || g.status !== "ongoing") throw new Error("no game");
-
         let updates: any = {};
 
-        if (g.type === 'rps') {
+        if (g.type === 'coinflip') {
+          // Coin Flip Logic
+          // Anyone can flip, result is random. Winner is random? No, usually betting.
+          // Let's just say "Flip" gives a random result (Heads/Tails) and we can assign a winner randomly?
+          // Alternatively: User A started it. Result is Heads/Tails.
+          // Let's just output result. Who wins? Maybe nobody "wins" in the sense of a competitive game unless someone called it.
+          // For simplicity: Flip -> 50/50 Chance. If result is Heads, Challenger wins? Or assume Challenger chose Heads?
+          // Let's just show result.
+          if (g.status !== 'ongoing') throw new Error("not ongoing");
+
+          const isHeads = Math.random() > 0.5;
+          const result = isHeads ? 'heads' : 'tails';
+
+          // Random winner for fun? Or just finish.
+          // Let's pick a random winner from players
+          const winner = g.players[isHeads ? 0 : 1];
+
+          updates = {
+            ...g,
+            result,
+            status: 'finished',
+            winner,
+            updatedAt: serverTimestamp()
+          };
+
+        } else if (g.type === 'rps') {
           // Rock Paper Scissors Logic
           if (g.moves && g.moves[user.uid]) throw new Error("already moved");
 
