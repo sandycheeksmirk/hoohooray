@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import styles from '../page.module.css';
 
 interface CallOverlayProps {
@@ -7,10 +7,14 @@ interface CallOverlayProps {
     onAccept: () => void;
     onDecline: () => void;
     onEnd: () => void;
+    localStream?: MediaStream | null;
+    remoteStream?: MediaStream | null;
 }
 
-export default function CallOverlay({ call, user, onAccept, onDecline, onEnd }: CallOverlayProps) {
+export default function CallOverlay({ call, user, onAccept, onDecline, onEnd, localStream, remoteStream }: CallOverlayProps) {
     const [duration, setDuration] = useState(0);
+    const localVideoRef = useRef<HTMLVideoElement>(null);
+    const remoteVideoRef = useRef<HTMLVideoElement>(null);
 
     useEffect(() => {
         let interval: any;
@@ -22,6 +26,18 @@ export default function CallOverlay({ call, user, onAccept, onDecline, onEnd }: 
         }
         return () => clearInterval(interval);
     }, [call.status, call.connectedAt]);
+
+    useEffect(() => {
+        if (localVideoRef.current && localStream) {
+            localVideoRef.current.srcObject = localStream;
+        }
+    }, [localStream]);
+
+    useEffect(() => {
+        if (remoteVideoRef.current && remoteStream) {
+            remoteVideoRef.current.srcObject = remoteStream;
+        }
+    }, [remoteStream]);
 
     const formatTime = (s: number) => {
         const m = Math.floor(s / 60);
@@ -35,35 +51,53 @@ export default function CallOverlay({ call, user, onAccept, onDecline, onEnd }: 
     if (!call) return null;
 
     return (
-        <div className={styles.settingsPanel} style={{ background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div className={styles.settingsPanel} style={{ background: 'rgba(0,0,0,0.9)', display: 'flex', alignItems: 'center', justifyContent: 'center', inset: 0, position: 'fixed', width: '100%', height: '100%', zIndex: 100 }}>
             <div style={{
+                position: 'relative',
+                width: '100%',
+                height: '100%',
+                maxWidth: 800,
+                maxHeight: 600,
                 background: '#1a1a1a',
-                padding: 40,
                 borderRadius: 24,
-                width: 320,
-                textAlign: 'center',
+                overflow: 'hidden',
                 display: 'flex',
                 flexDirection: 'column',
-                alignItems: 'center',
-                boxShadow: '0 10px 40px rgba(0,0,0,0.5)',
-                border: '1px solid #333'
             }}>
 
-                <div style={{ width: 100, height: 100, borderRadius: 50, background: '#333', marginBottom: 20, overflow: 'hidden', position: 'relative' }}>
-                    {/* Placeholder for avatar */}
-                    <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 40 }}>
-                        {isVideo ? '📹' : '👤'}
+                {/* Remote Video (Full Size) */}
+                <div style={{ flex: 1, background: '#000', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    {remoteStream ? (
+                        <video ref={remoteVideoRef} autoPlay playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20 }}>
+                            <div style={{ width: 120, height: 120, borderRadius: 60, background: '#333', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 60 }}>
+                                👤
+                            </div>
+                            <div style={{ fontSize: 24, fontWeight: 'bold' }}>{call.callerName || 'User'}</div>
+                            <div style={{ color: 'var(--muted)' }}>
+                                {call.status === 'ringing' ? (isCaller ? 'Calling...' : 'Incoming Call...') : 'Connecting...'}
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* Local Video (PiP) */}
+                {localStream && isVideo && (
+                    <div style={{ position: 'absolute', top: 20, right: 20, width: 120, height: 160, borderRadius: 12, overflow: 'hidden', background: '#333', boxShadow: '0 4px 20px rgba(0,0,0,0.5)' }}>
+                        <video ref={localVideoRef} autoPlay playsInline muted style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     </div>
-                </div>
+                )}
 
-                <h2 style={{ marginBottom: 8, fontSize: 24 }}>{call.callerName || 'Unknown'}</h2>
+                {/* Controls */}
+                <div style={{ padding: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 40, background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(10px)', position: 'absolute', bottom: 0, width: '100%' }}>
 
-                <div style={{ marginBottom: 40, color: 'var(--muted)', fontSize: 16 }}>
-                    {call.status === 'ringing' ? (isCaller ? 'Calling...' : 'Incoming Call...') : 'Connected'}
-                    {call.status === 'connected' && ` • ${formatTime(duration)}`}
-                </div>
+                    {call.status === 'connected' && (
+                        <div style={{ position: 'absolute', top: -40, color: 'white', background: 'rgba(0,0,0,0.6)', padding: '4px 12px', borderRadius: 20, fontSize: 13 }}>
+                            {formatTime(duration)}
+                        </div>
+                    )}
 
-                <div style={{ display: 'flex', gap: 32 }}>
                     {call.status === 'ringing' && !isCaller && (
                         <button
                             onClick={onAccept}

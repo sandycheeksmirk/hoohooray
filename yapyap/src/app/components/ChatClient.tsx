@@ -249,6 +249,16 @@ export default function ChatClient() {
   const [friendsList, setFriendsList] = useState<Array<{ uid: string; username?: string; name?: string; bio?: string; photo?: string }>>([]);
   const [profileEdit, setProfileEdit] = useState({ name: "", bio: "" });
   const [call, setCall] = useState<any>(null);
+  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+  const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
+  const pc = useRef<RTCPeerConnection | null>(null);
+
+  const rtcConfig = {
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' }
+    ]
+  };
 
   // Fetch full profile when viewing someone
   useEffect(() => {
@@ -583,20 +593,108 @@ export default function ChatClient() {
 
 
 
+  async function setupPC(chatId: string) {
+    if (pc.current) return pc.current;
+
+    const _pc = new RTCPeerConnection(rtcConfig);
+    pc.current = _pc;
+
+    _pc.onicecandidate = async (event) => {
+      if (event.candidate) {
+        await addDoc(collection(db, `chats/${chatId}/candidates`), {
+          candidate: JSON.stringify(event.candidate),
+          uid: user?.uid,
+          createdAt: serverTimestamp()
+        });
+      }
+    };
+
+    _pc.ontrack = (event) => {
+      if (event.streams && event.streams[0]) {
+        setRemoteStream(event.streams[0]);
+      } else {
+        const inboundStream = new MediaStream();
+        inboundStream.addTrack(event.track);
+        setRemoteStream(inboundStream);
+      }
+    };
+
+    return _pc;
+  }
+
+  // Effect to handle Signaling (Answer & Candidates)
+  useEffect(() => {
+    const activeChat = chats.find(c => c.call && (c.call.status === 'ringing' || c.call.status === 'connected'));
+    if (!activeChat || !activeChat.call || !user) return;
+
+    // 1. Handle Answer (Caller Side)
+    if (activeChat.call.caller === user.uid && activeChat.call.answer && pc.current && !pc.current.currentRemoteDescription) {
+      const desc = new RTCSessionDescription(JSON.parse(activeChat.call.answer));
+      pc.current.setRemoteDescription(desc).catch(e => console.error("Error setting remote desc", e));
+    }
+
+    // 2. Listen for Candidates
+    // Only listen if we have a PC
+    if (!pc.current) return;
+
+    const q = query(collection(db, `chats/${activeChat.id}/candidates`), orderBy('createdAt'));
+    const unsub = onSnapshot(q, (snap) => {
+      snap.docChanges().forEach(async (change) => {
+        if (change.type === 'added') {
+          const data = change.doc.data();
+          // Only add candidates from the OTHER user
+          if (data.uid !== user.uid && pc.current) {
+            try {
+              const candidate = new RTCIceCandidate(JSON.parse(data.candidate));
+              // Candidates can only be added after remote description is set.
+              if (pc.current.remoteDescription) {
+                await pc.current.addIceCandidate(candidate);
+              } else {
+                // Queue? For now, we rely on Firebase latency being slower than SDP exchange mostly, or we retry.
+                // In a real app we queue them.
+              }
+            } catch (e) {
+              // ignore
+            }
+          }
+        }
+      });
+    });
+    return () => unsub();
+  }, [chats, user]);
+
+
   async function startCall(type: 'audio' | 'video') {
     if (!user || !selected) return;
     try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: type === 'video'
+      });
+      setLocalStream(stream);
+
+      const _pc = await setupPC(selected);
+      stream.getTracks().forEach(track => _pc.addTrack(track, stream));
+
+      const offer = await _pc.createOffer();
+      await _pc.setLocalDescription(offer);
+
       const chatRef = doc(db, "chats", selected);
+
+      // Clear candidates from previous calls?Ideally yes but we just append here.
+
       await updateDoc(chatRef, {
         call: {
           caller: user.uid,
           callerName: user.name || "Anonymous",
           type,
           status: 'ringing',
+          offer: JSON.stringify(offer),
           startedAt: serverTimestamp()
         },
         updatedAt: serverTimestamp()
       } as any);
+
       // System msg
       await addDoc(collection(db, `chats/${selected}/messages`), {
         text: `📞 Started a ${type} call`,
@@ -607,7 +705,7 @@ export default function ChatClient() {
       });
     } catch (e) {
       console.error(e);
-      alert("Error starting call");
+      alert("Error starting call: " + (e as any).message);
     }
   }
 
@@ -616,12 +714,36 @@ export default function ChatClient() {
     if (!user || !target) return;
     try {
       if (chatId && chatId !== selected) setSelected(chatId);
+
+      // Get Chat Data specifically to get Offer
+      const chatDoc = await getDoc(doc(db, "chats", target));
+      const chatData = chatDoc.data() as any;
+      if (!chatData?.call?.offer) throw new Error("No offer found");
+
+      const type = chatData.call.type;
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: type === 'video'
+      });
+      setLocalStream(stream);
+
+      const _pc = await setupPC(target);
+      stream.getTracks().forEach(track => _pc.addTrack(track, stream));
+
+      const remoteDesc = new RTCSessionDescription(JSON.parse(chatData.call.offer));
+      await _pc.setRemoteDescription(remoteDesc);
+
+      const answer = await _pc.createAnswer();
+      await _pc.setLocalDescription(answer);
+
       await updateDoc(doc(db, "chats", target), {
         "call.status": "connected",
+        "call.answer": JSON.stringify(answer),
         "call.connectedAt": serverTimestamp(),
         updatedAt: serverTimestamp()
       } as any);
-    } catch (e) { console.error(e); }
+    } catch (e) { console.error(e); alert("Error accepting call"); }
   }
 
   async function declineCall(chatId?: string) {
@@ -641,6 +763,12 @@ export default function ChatClient() {
 
   async function endCall(chatId?: string) {
     const target = chatId || selected;
+
+    // Cleanup
+    if (pc.current) { pc.current.close(); pc.current = null; }
+    if (localStream) { localStream.getTracks().forEach(t => t.stop()); setLocalStream(null); }
+    setRemoteStream(null);
+
     if (!user || !target) return;
     try {
       await updateDoc(doc(db, "chats", target), { call: null, updatedAt: serverTimestamp() } as any);
@@ -1415,6 +1543,8 @@ export default function ChatClient() {
                   onAccept={() => acceptCall(activeCallChat.id)}
                   onDecline={() => declineCall(activeCallChat.id)}
                   onEnd={() => endCall(activeCallChat.id)}
+                  localStream={localStream}
+                  remoteStream={remoteStream}
                 />
               );
             }
