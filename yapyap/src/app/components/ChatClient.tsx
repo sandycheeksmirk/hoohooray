@@ -15,6 +15,7 @@ import {
   updateDoc,
   runTransaction,
   getDoc,
+  getDocs,
   where,
 } from "firebase/firestore";
 import { auth, googleProvider } from "../lib/firebase";
@@ -167,8 +168,16 @@ export default function ChatClient() {
   useEffect(() => {
     if (!auth) return;
     const unsub = onAuthStateChanged(auth, (u) => {
-      if (u) setUser({ uid: u.uid, name: u.displayName || undefined, photo: u.photoURL || undefined });
-      else setUser(null);
+      if (u) {
+        setUser({ uid: u.uid, name: u.displayName || undefined, photo: u.photoURL || undefined });
+        // ensure a user profile doc exists (account creation)
+        try {
+          const userRef = doc(db, "users", u.uid);
+          setDoc(userRef, { name: u.displayName || null, photo: u.photoURL || null, createdAt: serverTimestamp() }, { merge: true } as any);
+        } catch (e) {
+          console.error("Error creating user doc", e);
+        }
+      } else setUser(null);
     });
     return () => unsub();
   }, []);
@@ -216,6 +225,7 @@ export default function ChatClient() {
   const [usernameStatus, setUsernameStatus] = useState<string | null>(null);
   const [friendId, setFriendId] = useState("");
   const [friendStatus, setFriendStatus] = useState<string | null>(null);
+  const [pendingRequests, setPendingRequests] = useState<Array<any>>([]);
 
   async function reserveUsername(name: string) {
     if (!user) return setUsernameStatus("Not signed in");
@@ -250,27 +260,78 @@ export default function ChatClient() {
       const otherUid = (mapping.data() as any).uid as string;
       if (!otherUid) return setFriendStatus("Invalid user mapping");
       if (otherUid === user.uid) return setFriendStatus("That's you");
+      // send a friend request instead of auto-creating a chat
+      const requestsQ = query(collection(db, "friendRequests"), where("fromUid", "==", user.uid), where("toUid", "==", otherUid), where("status", "==", "pending"));
+      const existing = await getDocs(requestsQ);
+      if (!existing.empty) return setFriendStatus("Request already pending");
 
-      // deterministic chat id for DM
-      const ids = [user.uid, otherUid].sort();
+      await addDoc(collection(db, "friendRequests"), {
+        fromUid: user.uid,
+        toUid: otherUid,
+        fromUsername: profile?.username || null,
+        toUsername: clean,
+        status: "pending",
+        createdAt: serverTimestamp(),
+      });
+      setFriendStatus("Request sent");
+    } catch (e) {
+      console.error(e);
+      setFriendStatus("Error adding friend");
+    }
+  }
+
+  // listen for incoming friend requests
+  useEffect(() => {
+    if (!user) {
+      setPendingRequests([]);
+      return;
+    }
+    const q = query(collection(db, "friendRequests"), where("toUid", "==", user.uid), where("status", "==", "pending"));
+    const unsub = onSnapshot(q, (snap) => {
+      setPendingRequests(snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })));
+    });
+    return () => unsub();
+  }, [user?.uid]);
+
+  // open notifications when new friend requests arrive
+  useEffect(() => {
+    if (pendingRequests.length > 0 && !notificationsOpen) {
+      setNotificationsOpen(true);
+    }
+  }, [pendingRequests.length]);
+
+  async function acceptRequest(req: any) {
+    try {
+      const otherUid = req.fromUid as string;
+      const otherUsername = req.fromUsername as string || "";
+      const ids = [user!.uid, otherUid].sort();
       const chatId = `dm_${ids[0]}_${ids[1]}`;
       const chatRef = doc(db, "chats", chatId);
       const chatSnap = await getDoc(chatRef);
       if (!chatSnap.exists()) {
-        // create chat
         await setDoc(chatRef, {
-          members: [user.uid, otherUid],
-          name: `DM: ${clean}`,
+          members: [user!.uid, otherUid],
+          name: `DM: ${otherUsername || otherUid}`,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         });
       }
+      await updateDoc(doc(db, "friendRequests", req.id), { status: "accepted", respondedAt: serverTimestamp() });
+      setFriendStatus("Friend request accepted");
       setSelected(chatId);
-      setFriendStatus("Chat opened");
-      setSettingsOpen(false);
     } catch (e) {
       console.error(e);
-      setFriendStatus("Error adding friend");
+      setFriendStatus("Error accepting request");
+    }
+  }
+
+  async function declineRequest(req: any) {
+    try {
+      await updateDoc(doc(db, "friendRequests", req.id), { status: "declined", respondedAt: serverTimestamp() });
+      setFriendStatus("Friend request declined");
+    } catch (e) {
+      console.error(e);
+      setFriendStatus("Error declining request");
     }
   }
 
@@ -427,8 +488,8 @@ export default function ChatClient() {
                 style={{ position: "relative" }}
               >
                 🔔
-                {unreadChats.length > 0 && (
-                  <span className={styles.badge}>{unreadChats.length}</span>
+                {(unreadChats.length + pendingRequests.length) > 0 && (
+                  <span className={styles.badge}>{unreadChats.length + pendingRequests.length}</span>
                 )}
               </button>
 
@@ -529,6 +590,27 @@ export default function ChatClient() {
             <div className={styles.notificationPanel} role="dialog" aria-modal="true">
               <div className={styles.notificationInner}>
                 <h3>Notifications</h3>
+
+                {pendingRequests.length > 0 && (
+                  <div style={{ marginBottom: 12 }}>
+                    <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Friend Requests</div>
+                    <ul style={{ padding: 0, listStyle: "none", margin: 0 }}>
+                      {pendingRequests.map((r) => (
+                        <li key={r.id} className={styles.notificationItem} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <div>
+                            <div style={{ fontWeight: 600 }}>{r.fromUsername || r.fromUid}</div>
+                            <div style={{ fontSize: 13, color: "var(--muted)" }}>Wants to be your friend</div>
+                          </div>
+                          <div style={{ display: "flex", gap: 8 }}>
+                            <button className={styles.sendBtn} onClick={() => acceptRequest(r)}>Accept</button>
+                            <button className={styles.sendBtn} onClick={() => declineRequest(r)}>Decline</button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
                 {unreadChats.length === 0 ? (
                   <div>No new messages</div>
                 ) : (
@@ -546,6 +628,7 @@ export default function ChatClient() {
                     </div>
                   </>
                 )}
+
               </div>
             </div>
           )}
