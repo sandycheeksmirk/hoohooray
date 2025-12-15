@@ -1,4 +1,6 @@
 "use client";
+import GameCenter from "./GameCenter";
+import ActiveGame from "./ActiveGame";
 
 import React, { useEffect, useState, useRef } from "react";
 import styles from "../page.module.css";
@@ -66,7 +68,7 @@ export default function ChatClient() {
     purple: "#7c3aed",
   };
 
-  const emojiList = ["😀","😁","😂","😍","😎","😅","👍","🙏","🎉","🔥","❤️","🤖","🎲","✋","💬"];
+  const emojiList = ["😀", "😁", "😂", "😍", "😎", "😅", "👍", "🙏", "🎉", "🔥", "❤️", "🤖", "🎲", "✋", "💬"];
 
   const [color, setColor] = useState<string>(() => {
     try {
@@ -80,7 +82,7 @@ export default function ChatClient() {
     try {
       const f = localStorage.getItem("format");
       if (f === "compact" || f === "minimal") return f as any;
-    } catch (e) {}
+    } catch (e) { }
     return "bubble";
   });
 
@@ -97,14 +99,14 @@ export default function ChatClient() {
     try {
       document.documentElement.style.setProperty("--accent", color);
       localStorage.setItem("accent", color);
-    } catch (e) {}
+    } catch (e) { }
   }, [color]);
 
   useEffect(() => {
     try {
       document.documentElement.setAttribute("data-format", format);
       localStorage.setItem("format", format);
-    } catch (e) {}
+    } catch (e) { }
   }, [format]);
 
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -120,7 +122,7 @@ export default function ChatClient() {
     try {
       document.documentElement.style.setProperty("--app-font", font);
       localStorage.setItem("font", font);
-    } catch (e) {}
+    } catch (e) { }
   }, [font]);
 
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -135,7 +137,7 @@ export default function ChatClient() {
   useEffect(() => {
     try {
       localStorage.setItem("lastChecked", JSON.stringify(lastChecked));
-    } catch (e) {}
+    } catch (e) { }
   }, [lastChecked]);
 
   function getTimeField(t: any) {
@@ -156,7 +158,7 @@ export default function ChatClient() {
       const next = { ...prev, [chatId]: Date.now() };
       try {
         localStorage.setItem("lastChecked", JSON.stringify(next));
-      } catch (e) {}
+      } catch (e) { }
       return next;
     });
   }
@@ -234,6 +236,7 @@ export default function ChatClient() {
   const [pendingRequests, setPendingRequests] = useState<Array<any>>([]);
   const [addFriendOpen, setAddFriendOpen] = useState(false);
   const [gameOpen, setGameOpen] = useState(false);
+  const [gameCenterOpen, setGameCenterOpen] = useState(false);
   const [game, setGame] = useState<any>(null);
   const [gameMenuOpen, setGameMenuOpen] = useState(false);
   const gameMenuRef = useRef<HTMLDivElement | null>(null);
@@ -262,7 +265,54 @@ export default function ChatClient() {
     }
   }
 
-  async function addFriendById(id: string) : Promise<boolean> {
+  async function startNewGame(friendUid: string, gameType: string = 'tictactoe') {
+    if (!user) return;
+    // 1. Ensure chat exists and switch to it
+    await openDM(friendUid);
+
+    // wait a bit for selected to update? actually openDM sets selected immediately but the game hook relies on it.
+    // We can just get the chat ID deterministically.
+    const ids = [user.uid, friendUid].sort();
+    const chatId = `dm_${ids[0]}_${ids[1]}`;
+
+    const chatRef = doc(db, "chats", chatId);
+
+    // 2. Initialize Game
+    let gameData: any = {};
+
+    if (gameType === 'tictactoe') {
+      const sorted = [...ids]; // ids are already sorted
+      const marks: Record<string, string> = {};
+      marks[sorted[0]] = "X";
+      marks[sorted[1]] = "O";
+      gameData = {
+        type: 'tictactoe',
+        board: Array(9).fill(null),
+        turn: sorted[0], // First alphabetically goes first
+        marks,
+        status: "ongoing",
+        startedAt: serverTimestamp()
+      };
+    } else if (gameType === 'rps') {
+      gameData = {
+        type: 'rps',
+        players: ids,
+        moves: {},
+        status: 'ongoing',
+        startedAt: serverTimestamp()
+      };
+    }
+
+    try {
+      await updateDoc(chatRef, { game: gameData, updatedAt: serverTimestamp() } as any);
+      setGameOpen(true);
+    } catch (e) {
+      console.error("Error starting game", e);
+      setFriendStatus("Could not start game");
+    }
+  }
+
+  async function addFriendById(id: string): Promise<boolean> {
     if (!user) { setFriendStatus("Not signed in"); return false; }
     const clean = id.trim().toLowerCase();
     if (!clean) { setFriendStatus("Enter an ID"); return false; }
@@ -352,11 +402,11 @@ export default function ChatClient() {
 
   function checkWinner(board: Array<string | null>) {
     const lines = [
-      [0,1,2],[3,4,5],[6,7,8],
-      [0,3,6],[1,4,7],[2,5,8],
-      [0,4,8],[2,4,6]
+      [0, 1, 2], [3, 4, 5], [6, 7, 8],
+      [0, 3, 6], [1, 4, 7], [2, 5, 8],
+      [0, 4, 8], [2, 4, 6]
     ];
-    for (const [a,b,c] of lines) {
+    for (const [a, b, c] of lines) {
       if (board[a] && board[a] === board[b] && board[a] === board[c]) return board[a];
     }
     return null;
@@ -385,7 +435,7 @@ export default function ChatClient() {
     }
   }
 
-  async function makeMove(index: number) {
+  async function makeMove(move: any) {
     if (!user || !selected) return;
     const chatRef = doc(db, "chats", selected);
     try {
@@ -394,26 +444,78 @@ export default function ChatClient() {
         if (!snap.exists()) throw new Error("no chat");
         const g = (snap.data() as any).game;
         if (!g || g.status !== "ongoing") throw new Error("no game");
-        if (g.turn !== user.uid) throw new Error("not your turn");
-        const board = g.board || Array(9).fill(null);
-        if (board[index]) throw new Error("occupied");
-        const newBoard = [...board];
-        const mark = g.marks[user.uid];
-        newBoard[index] = mark;
-        const winnerMark = checkWinner(newBoard);
-        let status = "ongoing";
-        let winner: string | null = null;
-        let nextTurn: string | null = null;
-        if (winnerMark) {
-          status = "finished";
-          winner = Object.keys(g.marks).find((k) => g.marks[k] === winnerMark) || null;
-        } else if (newBoard.every(Boolean)) {
-          status = "finished";
-          winner = null;
+
+        let updates: any = {};
+
+        if (g.type === 'rps') {
+          // Rock Paper Scissors Logic
+          if (g.moves && g.moves[user.uid]) throw new Error("already moved");
+
+          const newMoves = { ...g.moves, [user.uid]: move };
+          const players = g.players || [];
+
+          // Check if both moved
+          if (players.every((p: string) => newMoves[p])) {
+            // Determine winner
+            const p1 = players[0];
+            const p2 = players[1];
+            const m1 = newMoves[p1];
+            const m2 = newMoves[p2];
+
+            let winner = null;
+            if (m1 === m2) winner = 'draw';
+            else if (
+              (m1 === 'rock' && m2 === 'scissors') ||
+              (m1 === 'scissors' && m2 === 'paper') ||
+              (m1 === 'paper' && m2 === 'rock')
+            ) {
+              winner = p1;
+            } else {
+              winner = p2;
+            }
+
+            updates = {
+              ...g,
+              moves: newMoves,
+              status: 'finished',
+              winner,
+              updatedAt: serverTimestamp()
+            };
+          } else {
+            // Waiting for other player
+            updates = {
+              ...g,
+              moves: newMoves,
+              updatedAt: serverTimestamp()
+            };
+          }
+
         } else {
-          nextTurn = Object.keys(g.marks).find((k) => k !== user.uid) || null;
+          // Tic Tac Toe Logic (Default)
+          const index = move as number;
+          if (g.turn !== user.uid) throw new Error("not your turn");
+          const board = g.board || Array(9).fill(null);
+          if (board[index]) throw new Error("occupied");
+          const newBoard = [...board];
+          const mark = g.marks[user.uid];
+          newBoard[index] = mark;
+          const winnerMark = checkWinner(newBoard);
+          let status = "ongoing";
+          let winner: string | null = null;
+          let nextTurn: string | null = null;
+          if (winnerMark) {
+            status = "finished";
+            winner = Object.keys(g.marks).find((k) => g.marks[k] === winnerMark) || null;
+          } else if (newBoard.every(Boolean)) {
+            status = "finished";
+            winner = null;
+          } else {
+            nextTurn = Object.keys(g.marks).find((k) => k !== user.uid) || null;
+          }
+          updates = { ...g, board: newBoard, turn: nextTurn, status, winner, updatedAt: serverTimestamp() };
         }
-        tx.update(chatRef as any, { game: { ...g, board: newBoard, turn: nextTurn, status, winner, updatedAt: serverTimestamp() }, updatedAt: serverTimestamp() } as any);
+
+        tx.update(chatRef as any, { game: updates, updatedAt: serverTimestamp() } as any);
       });
     } catch (e) {
       console.error(e);
@@ -653,7 +755,10 @@ export default function ChatClient() {
           <div style={{ padding: 10, borderBottom: "1px solid rgba(0,0,0,0.06)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
               <div style={{ fontWeight: 700 }}>Friends</div>
-              <button className={styles.sendBtn} onClick={() => { if (!profile?.username) { setSettingsOpen(true); setUsernameStatus("Create an ID to add friends"); return; } setAddFriendOpen((s) => !s); }} style={{ padding: "6px 10px" }}>Add</button>
+              <div style={{ display: 'flex', gap: 4 }}>
+                <button className={styles.sendBtn} title="Game Center" onClick={() => setGameCenterOpen(true)} style={{ padding: "6px 10px" }}>🎮</button>
+                <button className={styles.sendBtn} onClick={() => { if (!profile?.username) { setSettingsOpen(true); setUsernameStatus("Create an ID to add friends"); return; } setAddFriendOpen((s) => !s); }} style={{ padding: "6px 10px" }}>Add</button>
+              </div>
             </div>
             <ul style={{ padding: 0, margin: 0, listStyle: "none" }}>
               {friendsList.length === 0 ? (
@@ -803,7 +908,7 @@ export default function ChatClient() {
                 </div>
               )}
 
-              
+
             </div>
           </header>
 
@@ -865,7 +970,7 @@ export default function ChatClient() {
                   )}
                   {usernameStatus && <div style={{ fontSize: 13, color: "var(--muted)" }}>{usernameStatus}</div>}
 
-                
+
                 </div>
 
                 <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
@@ -900,42 +1005,34 @@ export default function ChatClient() {
             </div>
           )}
 
-          {gameOpen && (
-            <div className={styles.settingsPanel} role="dialog" aria-modal="true" style={{ left: 480 }}>
-              <div className={styles.settingsInner}>
-                <h3>Tic-Tac-Toe</h3>
-                <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 8 }}>Play with your friend in this chat.</div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, width: 240 }}>
-                  {Array.from({ length: 9 }).map((_, i) => (
-                    <button
-                      key={i}
-                      onClick={() => { if (game && game.status === "ongoing" && game.turn === user?.uid) makeMove(i); }}
-                      style={{ height: 64, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.03)", cursor: game && game.status === "ongoing" && game.turn === user?.uid ? "pointer" : "default" }}
-                    >
-                      {game?.board?.[i] || ""}
-                    </button>
-                  ))}
-                </div>
-                <div style={{ marginTop: 10 }}>
-                  <div style={{ fontSize: 13 }}>
-                    {game ? (
-                      game.status === "ongoing" ? (
-                        <div>Turn: {friendsList.find((f) => f.uid === game.turn)?.username || (game.turn === user?.uid ? "You" : game.turn)}</div>
-                      ) : (
-                        <div>{game.winner ? `Winner: ${friendsList.find((f) => f.uid === game.winner)?.username || game.winner}` : "Draw"}</div>
-                      )
-                    ) : (
-                      <div>No active game</div>
-                    )}
-                  </div>
-                </div>
-                <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
-                  <button className={styles.sendBtn} onClick={() => { startGame(); }}>Start Game</button>
-                  <button className={styles.sendBtn} onClick={() => setGameOpen(false)}>Close</button>
-                </div>
-              </div>
-            </div>
+          {gameOpen && game && (
+            <ActiveGame
+              game={game}
+              user={user}
+              opponent={
+                (game.players || (game.marks && Object.keys(game.marks)))
+                  ?.filter((uid: string) => uid !== user?.uid)
+                  .map((uid: string) => friendsList.find(f => f.uid === uid) || { uid })
+                [0]
+              }
+              onMove={makeMove}
+              onClose={() => setGameOpen(false)}
+              onRestart={() => selected && startNewGame(
+                (game.players || Object.keys(game.marks)).find((id: string) => id !== user?.uid)!,
+                game.type
+              )}
+            />
           )}
+
+          <GameCenter
+            isOpen={gameCenterOpen}
+            onClose={() => setGameCenterOpen(false)}
+            user={user}
+            friendsList={friendsList}
+            chats={chats}
+            onOpenChat={(id) => { setSelected(id); setGameOpen(true); }}
+            onStartGame={startNewGame}
+          />
 
           {notificationsOpen && (
             <div className={styles.notificationPanel} role="dialog" aria-modal="true">
