@@ -305,6 +305,22 @@ export default function ChatClient() {
         requestedBy: user.uid,
         startedAt: serverTimestamp()
       };
+    } else if (gameType === 'coinflip') {
+      gameData = {
+        type: 'coinflip',
+        players: ids,
+        status: 'pending',
+        requestedBy: user.uid,
+        startedAt: serverTimestamp()
+      };
+    } else if (gameType === 'dice') {
+      gameData = {
+        type: 'dice',
+        players: ids,
+        status: 'pending',
+        requestedBy: user.uid,
+        startedAt: serverTimestamp()
+      };
     }
 
     try {
