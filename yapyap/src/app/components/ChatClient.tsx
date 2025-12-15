@@ -13,6 +13,8 @@ import {
   doc,
   setDoc,
   updateDoc,
+  runTransaction,
+  getDoc,
 } from "firebase/firestore";
 import { auth, googleProvider } from "../lib/firebase";
 import { onAuthStateChanged, signInWithPopup, signOut } from "firebase/auth";
@@ -158,6 +160,7 @@ export default function ChatClient() {
   }
 
   const [user, setUser] = useState<{ uid: string; name?: string; photo?: string } | null>(null);
+  const [profile, setProfile] = useState<{ username?: string; name?: string } | null>(null);
 
   useEffect(() => {
     if (!auth) return;
@@ -167,6 +170,26 @@ export default function ChatClient() {
     });
     return () => unsub();
   }, []);
+
+  // load user profile (username etc.) from Firestore
+  useEffect(() => {
+    if (!user) {
+      setProfile(null);
+      return;
+    }
+    const userRef = doc(db, "users", user.uid);
+    const unsub = onSnapshot(userRef, (s) => {
+      setProfile(s.exists() ? (s.data() as any) : null);
+    });
+    return () => unsub();
+  }, [user?.uid]);
+
+  // prompt to create an ID if user has no username
+  useEffect(() => {
+    if (user && profile && !profile.username) {
+      setSettingsOpen(true);
+    }
+  }, [user?.uid, profile?.username]);
 
   async function signIn() {
     if (!auth) return alert("Auth not initialized");
@@ -183,6 +206,69 @@ export default function ChatClient() {
       await signOut(auth);
     } catch (e) {
       console.error("Sign-out failed", e);
+    }
+  }
+
+  // username & friend functions
+  const [usernameInput, setUsernameInput] = useState("");
+  const [usernameStatus, setUsernameStatus] = useState<string | null>(null);
+  const [friendId, setFriendId] = useState("");
+  const [friendStatus, setFriendStatus] = useState<string | null>(null);
+
+  async function reserveUsername(name: string) {
+    if (!user) return setUsernameStatus("Not signed in");
+    const clean = name.trim().toLowerCase();
+    if (!/^[a-z0-9_-]{3,32}$/.test(clean)) return setUsernameStatus("Use 3–32 chars: a-z 0-9 _ -");
+    const unameRef = doc(db, "usernames", clean);
+    try {
+      await runTransaction(db, async (tx) => {
+        const snap = await tx.get(unameRef as any);
+        if (snap.exists()) throw new Error("taken");
+        tx.set(unameRef, { uid: user.uid, createdAt: serverTimestamp() });
+        const userRef = doc(db, "users", user.uid);
+        tx.set(userRef, { username: clean, name: user.name || null, updatedAt: serverTimestamp() }, { merge: true } as any);
+      });
+      setUsernameStatus("Saved");
+    } catch (e: any) {
+      if (e && e.message === "taken") setUsernameStatus("ID already taken");
+      else {
+        console.error(e);
+        setUsernameStatus("Error saving ID");
+      }
+    }
+  }
+
+  async function addFriendById(id: string) {
+    if (!user) return setFriendStatus("Not signed in");
+    const clean = id.trim().toLowerCase();
+    if (!clean) return setFriendStatus("Enter an ID");
+    try {
+      const mapping = await getDoc(doc(db, "usernames", clean));
+      if (!mapping.exists()) return setFriendStatus("ID not found");
+      const otherUid = (mapping.data() as any).uid as string;
+      if (!otherUid) return setFriendStatus("Invalid user mapping");
+      if (otherUid === user.uid) return setFriendStatus("That's you");
+
+      // deterministic chat id for DM
+      const ids = [user.uid, otherUid].sort();
+      const chatId = `dm_${ids[0]}_${ids[1]}`;
+      const chatRef = doc(db, "chats", chatId);
+      const chatSnap = await getDoc(chatRef);
+      if (!chatSnap.exists()) {
+        // create chat
+        await setDoc(chatRef, {
+          members: [user.uid, otherUid],
+          name: `DM: ${clean}`,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      }
+      setSelected(chatId);
+      setFriendStatus("Chat opened");
+      setSettingsOpen(false);
+    } catch (e) {
+      console.error(e);
+      setFriendStatus("Error adding friend");
     }
   }
 
@@ -370,6 +456,26 @@ export default function ChatClient() {
                     <option value="Georgia, serif">Serif</option>
                   </select>
                 </label>
+
+                <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid rgba(255,255,255,0.03)" }}>
+                  <h4 style={{ margin: "6px 0" }}>Your ID</h4>
+                  {profile?.username ? (
+                    <div style={{ fontSize: 13, marginBottom: 8 }}>Your ID: <strong>{profile.username}</strong></div>
+                  ) : (
+                    <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                      <input placeholder="Choose an ID (a-z0-9_- )" value={usernameInput} onChange={(e) => setUsernameInput(e.target.value)} />
+                      <button className={styles.sendBtn} onClick={() => reserveUsername(usernameInput)}>Save</button>
+                    </div>
+                  )}
+                  {usernameStatus && <div style={{ fontSize: 13, color: "var(--muted)" }}>{usernameStatus}</div>}
+
+                  <h4 style={{ margin: "10px 0 6px" }}>Add friend by ID</h4>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <input placeholder="friend-id" value={friendId} onChange={(e) => setFriendId(e.target.value)} />
+                    <button className={styles.sendBtn} onClick={() => addFriendById(friendId)}>Add</button>
+                  </div>
+                  {friendStatus && <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 6 }}>{friendStatus}</div>}
+                </div>
 
                 <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
                   {user ? (
