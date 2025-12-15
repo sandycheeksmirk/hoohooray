@@ -19,7 +19,7 @@ export default function ActiveGame({ game, user, opponent, onMove, onClose, onRe
     const isRPS = game.type === 'rps';
 
     return (
-        <div className={styles.settingsPanel} role="dialog" aria-modal="true" style={{ left: 480, width: 300 }}>
+        <div className={styles.settingsPanel} role="dialog" aria-modal="true" style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: 320, zIndex: 100 }}>
             <div className={styles.settingsInner}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <h3>{isRPS ? 'Rock Paper Scissors' : 'Tic-Tac-Toe'}</h3>
@@ -53,11 +53,11 @@ export default function ActiveGame({ game, user, opponent, onMove, onClose, onRe
                 )}
 
                 {game.status !== 'pending' && isRPS && (
-                    <RPSBoard game={game} user={user} onMove={onMove} />
+                    <RPSBoard game={game} user={user} onMove={onMove} opponent={opponent} />
                 )}
 
-                <div style={{ marginTop: 10 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600 }}>
+                <div style={{ marginTop: 16, textAlign: 'center', minHeight: 24 }}>
+                    <div style={{ fontSize: 16, fontWeight: 700 }}>
                         {getStatusText(game, user, opponent)}
                     </div>
                 </div>
@@ -124,36 +124,51 @@ function TicTacToeBoard({ game, user, onMove }: any) {
     );
 }
 
-function RPSBoard({ game, user, onMove }: any) {
+function RPSBoard({ game, user, onMove, opponent }: any) {
     const moves = ['🪨', '📄', '✂️'];
     const labels = ['Rock', 'Paper', 'Scissors'];
     const values = ['rock', 'paper', 'scissors'];
 
     const myMove = game.moves?.[user.uid];
+    const opponentMove = game.moves?.[opponent?.uid];
+    const isFinished = game.status === 'finished';
 
     return (
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
-            {values.map((val, i) => (
-                <button
-                    key={val}
-                    onClick={() => {
-                        if (game.status === 'ongoing' && !myMove) onMove(val);
-                    }}
-                    disabled={!!myMove || game.status !== 'ongoing'}
-                    style={{
-                        flex: 1,
-                        padding: '12px 4px',
-                        background: myMove === val ? 'var(--accent)' : 'rgba(255,255,255,0.05)',
-                        border: '1px solid rgba(255,255,255,0.1)',
-                        borderRadius: 8,
-                        cursor: (!myMove && game.status === 'ongoing') ? 'pointer' : 'default',
-                        opacity: (myMove && myMove !== val) ? 0.5 : 1
-                    }}
-                >
-                    <div style={{ fontSize: 24 }}>{moves[i]}</div>
-                    <div style={{ fontSize: 11, marginTop: 4 }}>{labels[i]}</div>
-                </button>
-            ))}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+                {values.map((val, i) => {
+                    const selected = myMove === val;
+                    const isOpponentMove = isFinished && opponentMove === val;
+
+                    return (
+                        <button
+                            key={val}
+                            onClick={() => {
+                                if (game.status === 'ongoing' && !myMove) onMove(val);
+                            }}
+                            disabled={!!myMove || game.status !== 'ongoing'}
+                            style={{
+                                flex: 1,
+                                padding: '12px 4px',
+                                background: selected ? 'var(--accent)' : (isOpponentMove ? '#ef4444' : 'rgba(255,255,255,0.05)'),
+                                border: selected ? '2px solid #fff' : (isOpponentMove ? '2px solid #ef4444' : '1px solid rgba(255,255,255,0.1)'),
+                                borderRadius: 8,
+                                cursor: (!myMove && game.status === 'ongoing') ? 'pointer' : 'default',
+                                opacity: (myMove && !selected && !isOpponentMove) ? 0.3 : 1,
+                                position: 'relative'
+                            }}
+                        >
+                            <div style={{ fontSize: 24 }}>{moves[i]}</div>
+                            <div style={{ fontSize: 11, marginTop: 4 }}>{labels[i]}</div>
+                            {isOpponentMove && (
+                                <div style={{ position: 'absolute', top: -10, right: -10, background: '#ef4444', color: 'white', fontSize: 10, padding: '2px 6px', borderRadius: 4 }}>
+                                    Them
+                                </div>
+                            )}
+                        </button>
+                    );
+                })}
+            </div>
         </div>
     );
 }
