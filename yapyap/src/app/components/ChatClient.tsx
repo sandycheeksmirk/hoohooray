@@ -171,7 +171,7 @@ export default function ChatClient() {
   }
 
   const [user, setUser] = useState<{ uid: string; name?: string; photo?: string } | null>(null);
-  const [profile, setProfile] = useState<{ username?: string; name?: string; friends?: string[]; blocked?: boolean } | null>(null);
+  const [profile, setProfile] = useState<{ username?: string; name?: string; bio?: string; friends?: string[]; blocked?: boolean } | null>(null);
 
   useEffect(() => {
     if (!auth) return;
@@ -243,6 +243,28 @@ export default function ChatClient() {
   const [gameMenuOpen, setGameMenuOpen] = useState(false);
   const gameMenuRef = useRef<HTMLDivElement | null>(null);
   const [friendsList, setFriendsList] = useState<Array<{ uid: string; username?: string; name?: string; photo?: string }>>([]);
+  const [profileEdit, setProfileEdit] = useState({ name: "", bio: "" });
+
+  useEffect(() => {
+    if (settingsOpen && profile) {
+      setProfileEdit({ name: profile.name || user?.name || "", bio: profile.bio || "" });
+    }
+  }, [settingsOpen, profile]);
+
+  async function saveProfile() {
+    if (!user) return;
+    try {
+      await updateDoc(doc(db, "users", user.uid), {
+        name: profileEdit.name.trim() || null,
+        bio: profileEdit.bio.trim() || null,
+        updatedAt: serverTimestamp()
+      } as any);
+      // user.name is from auth but we use profile.name preferentially
+      // Wait for snapshot
+    } catch (e) {
+      console.error(e);
+    }
+  }
 
   async function reserveUsername(name: string) {
     if (!user) return setUsernameStatus("Not signed in");
@@ -1164,6 +1186,29 @@ export default function ChatClient() {
                   {usernameStatus && <div style={{ fontSize: 13, color: "var(--muted)" }}>{usernameStatus}</div>}
 
 
+                </div>
+
+                <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid rgba(255,255,255,0.03)" }}>
+                  <h4 style={{ margin: "6px 0" }}>Profile</h4>
+                  <label style={{ fontSize: 13, color: "var(--muted)" }}>
+                    Display Name
+                    <input
+                      value={profileEdit.name}
+                      onChange={(e) => setProfileEdit(p => ({ ...p, name: e.target.value }))}
+                      placeholder="Your Name"
+                      style={{ marginTop: 4, width: '100%' }}
+                    />
+                  </label>
+                  <label style={{ fontSize: 13, color: "var(--muted)", marginTop: 8 }}>
+                    Bio
+                    <textarea
+                      value={profileEdit.bio}
+                      onChange={(e) => setProfileEdit(p => ({ ...p, bio: e.target.value }))}
+                      placeholder="Tell us about yourself..."
+                      style={{ marginTop: 4, width: '100%', minHeight: 60, resize: 'vertical' }}
+                    />
+                  </label>
+                  <button className={styles.sendBtn} onClick={saveProfile} style={{ marginTop: 8, width: '100%' }}>Save Profile</button>
                 </div>
 
                 <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
