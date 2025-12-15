@@ -44,6 +44,31 @@ export default function ChatClient() {
     return "bw";
   });
 
+  const colorMap: Record<string, string> = {
+    red: "#ef4444",
+    orange: "#f97316",
+    yellow: "#f59e0b",
+    green: "#10b981",
+    blue: "#2563eb",
+    purple: "#7c3aed",
+  };
+
+  const [color, setColor] = useState<string>(() => {
+    try {
+      return localStorage.getItem("accent") || colorMap.blue;
+    } catch (e) {
+      return colorMap.blue;
+    }
+  });
+
+  const [format, setFormat] = useState<"bubble" | "compact" | "minimal">(() => {
+    try {
+      const f = localStorage.getItem("format");
+      if (f === "compact" || f === "minimal") return f as any;
+    } catch (e) {}
+    return "bubble";
+  });
+
   useEffect(() => {
     try {
       document.documentElement.setAttribute("data-theme", theme);
@@ -52,6 +77,20 @@ export default function ChatClient() {
       /* ignore in SSR */
     }
   }, [theme]);
+
+  useEffect(() => {
+    try {
+      document.documentElement.style.setProperty("--accent", color);
+      localStorage.setItem("accent", color);
+    } catch (e) {}
+  }, [color]);
+
+  useEffect(() => {
+    try {
+      document.documentElement.setAttribute("data-format", format);
+      localStorage.setItem("format", format);
+    } catch (e) {}
+  }, [format]);
 
   useEffect(() => {
     const q = query(collection(db, "chats"), orderBy("updatedAt", "desc"));
@@ -145,16 +184,43 @@ export default function ChatClient() {
               </div>
               <div className={styles.headerStatus}>online</div>
             </div>
-            <div className={styles.themeSelect}>
-              <select
-                aria-label="Theme"
-                value={theme}
-                onChange={(e) => setTheme(e.target.value as any)}
-              >
-                <option value="bw">Black & White</option>
-                <option value="dark">Dark</option>
-                <option value="light">Light</option>
-              </select>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div className={styles.colorSwatches}>
+                {Object.entries(colorMap).map(([key, hex]) => (
+                  <button
+                    key={key}
+                    aria-label={`Accent ${key}`}
+                    title={key}
+                    className={styles.swatch}
+                    onClick={() => setColor(hex)}
+                    style={{ background: hex, outline: color === hex ? "2px solid #fff" : "none" }}
+                  />
+                ))}
+              </div>
+
+              <div className={styles.themeSelect}>
+                <select
+                  aria-label="Theme"
+                  value={theme}
+                  onChange={(e) => setTheme(e.target.value as any)}
+                >
+                  <option value="bw">Black & White</option>
+                  <option value="dark">Dark</option>
+                  <option value="light">Light</option>
+                </select>
+              </div>
+
+              <div className={styles.themeSelect}>
+                <select
+                  aria-label="Format"
+                  value={format}
+                  onChange={(e) => setFormat(e.target.value as any)}
+                >
+                  <option value="bubble">Bubble</option>
+                  <option value="compact">Compact</option>
+                  <option value="minimal">Minimal</option>
+                </select>
+              </div>
             </div>
           </header>
 
