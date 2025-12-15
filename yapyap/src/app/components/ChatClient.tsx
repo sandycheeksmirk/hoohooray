@@ -45,6 +45,8 @@ export default function ChatClient() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const [emojiOpen, setEmojiOpen] = useState(false);
+  const emojiPanelRef = useRef<HTMLDivElement | null>(null);
   const [theme, setTheme] = useState<"light" | "dark" | "bw">(() => {
     try {
       const t = localStorage.getItem("theme");
@@ -63,6 +65,8 @@ export default function ChatClient() {
     blue: "#2563eb",
     purple: "#7c3aed",
   };
+
+  const emojiList = ["😀","😁","😂","😍","😎","😅","👍","🙏","🎉","🔥","❤️","🤖","🎲","✋","💬"];
 
   const [color, setColor] = useState<string>(() => {
     try {
@@ -231,6 +235,8 @@ export default function ChatClient() {
   const [addFriendOpen, setAddFriendOpen] = useState(false);
   const [gameOpen, setGameOpen] = useState(false);
   const [game, setGame] = useState<any>(null);
+  const [gameMenuOpen, setGameMenuOpen] = useState(false);
+  const gameMenuRef = useRef<HTMLDivElement | null>(null);
   const [friendsList, setFriendsList] = useState<Array<{ uid: string; username?: string; name?: string; photo?: string }>>([]);
 
   async function reserveUsername(name: string) {
@@ -421,6 +427,28 @@ export default function ChatClient() {
       setNotificationsOpen(true);
     }
   }, [pendingRequests.length]);
+
+  // close emoji panel when clicking outside
+  useEffect(() => {
+    function onDoc(e: MouseEvent) {
+      if (emojiOpen && emojiPanelRef.current && !(emojiPanelRef.current as any).contains(e.target)) {
+        setEmojiOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [emojiOpen]);
+
+  // close game menu when clicking outside
+  useEffect(() => {
+    function onDoc(e: MouseEvent) {
+      if (gameMenuOpen && gameMenuRef.current && !(gameMenuRef.current as any).contains(e.target)) {
+        setGameMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [gameMenuOpen]);
 
   async function acceptRequest(req: any) {
     try {
@@ -745,23 +773,34 @@ export default function ChatClient() {
 
               {/* Game button for 1:1 chats */}
               {chats.find((c) => c.id === selected && c.members && c.members.length === 2) && (
-                <button
-                  aria-label="Play game"
-                  title="Play Tic-Tac-Toe"
-                  onClick={async () => {
-                    const cur = chats.find((c) => c.id === selected);
-                    if (!cur) return;
-                    if (!profile?.username) { setSettingsOpen(true); setUsernameStatus("Create an ID to play"); return; }
-                    if (!game || game.status !== "ongoing") {
-                      await startGame();
-                    }
-                    setGameOpen((s) => !s);
-                  }}
-                  className={styles.sendBtn}
-                  style={{ padding: 8, minWidth: 84 }}
-                >
-                  🎮 Game
-                </button>
+                <div style={{ position: "relative" }} ref={gameMenuRef}>
+                  <button
+                    aria-label="Games"
+                    title="Games"
+                    onClick={() => setGameMenuOpen((s) => !s)}
+                    className={styles.sendBtn}
+                    style={{ padding: 8, minWidth: 84 }}
+                  >
+                    🎮 Game
+                  </button>
+                  {gameMenuOpen && (
+                    <div style={{ position: "absolute", right: 0, top: 40, width: 180, background: "var(--panel, rgba(0,0,0,0.7))", borderRadius: 6, padding: 8, boxShadow: "0 6px 18px rgba(0,0,0,0.4)", zIndex: 70 }}>
+                      <button
+                        className={styles.sendBtn}
+                        onClick={async () => {
+                          setGameMenuOpen(false);
+                          if (!profile?.username) { setSettingsOpen(true); setUsernameStatus("Create an ID to play"); return; }
+                          // open/start tic-tac-toe
+                          await startGame();
+                          setGameOpen(true);
+                        }}
+                        style={{ width: "100%", textAlign: "left", padding: "8px 10px" }}
+                      >
+                        🧩 Tic-Tac-Toe
+                      </button>
+                    </div>
+                  )}
+                </div>
               )}
 
               
@@ -960,16 +999,47 @@ export default function ChatClient() {
           </div>
 
           <form className={styles.inputBar} onSubmit={sendMessage}>
-            <input
-              className={styles.messageInput}
-              ref={inputRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Message"
-            />
-            <button className={styles.sendBtn} type="submit">
-              Send
-            </button>
+            <div style={{ position: "relative", display: "flex", alignItems: "center", width: "100%" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <button type="button" className={styles.sendBtn} onClick={() => setEmojiOpen((s) => !s)} title="Emoji" aria-label="Emoji" style={{ padding: 8 }}>
+                  😊
+                </button>
+                {emojiOpen && (
+                  <div ref={emojiPanelRef} style={{ position: "absolute", bottom: 56, left: 8, width: 260, background: "var(--panel, rgba(0,0,0,0.7))", padding: 8, borderRadius: 8, boxShadow: "0 6px 18px rgba(0,0,0,0.4)", zIndex: 60 }}>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      {emojiList.map((em) => (
+                        <button
+                          key={em}
+                          type="button"
+                          className={styles.sendBtn}
+                          onClick={() => {
+                            setInput((prev) => prev + em);
+                            setEmojiOpen(false);
+                            setTimeout(() => inputRef.current?.focus(), 50);
+                          }}
+                          style={{ padding: 6 }}
+                        >
+                          {em}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <input
+                className={styles.messageInput}
+                ref={inputRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder="Message"
+                style={{ flex: 1, marginLeft: 8 }}
+              />
+
+              <button className={styles.sendBtn} type="submit" style={{ marginLeft: 8 }}>
+                Send
+              </button>
+            </div>
           </form>
         </section>
       </div>
