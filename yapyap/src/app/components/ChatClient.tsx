@@ -554,6 +554,19 @@ export default function ChatClient() {
             updatedAt: serverTimestamp()
           };
 
+        } else if (g.type === 'dice') {
+          if (g.status !== 'ongoing') throw new Error("not ongoing");
+
+          const roll = Math.floor(Math.random() * 6) + 1;
+
+          updates = {
+            ...g,
+            result: roll,
+            status: 'finished',
+            winner: null, // Just a roll
+            updatedAt: serverTimestamp()
+          };
+
         } else if (g.type === 'rps') {
           // Rock Paper Scissors Logic
           if (g.moves && g.moves[user.uid]) throw new Error("already moved");
@@ -1354,10 +1367,42 @@ export default function ChatClient() {
                             );
                           }
 
+                          if (game && game.type === 'dice') {
+                            return (
+                              <div style={{ textAlign: 'center', padding: '12px 0' }}>
+                                <div style={{ fontSize: 40, marginBottom: 8 }}>
+                                  {game.status === 'finished' ? `🎲 ${game.result}` : '🎲'}
+                                </div>
+                                <div style={{ marginBottom: 12, fontSize: 14, fontWeight: 600 }}>
+                                  {game.status === 'finished' ? `Rolled a ${game.result}` : (game.status === 'pending' ? 'Pending...' : 'Rolling...')}
+                                </div>
+
+                                {game.status === 'pending' && (
+                                  game.requestedBy === user?.uid ? (
+                                    <div style={{ fontSize: 13, color: 'var(--muted)' }}>Waiting for accept...</div>
+                                  ) : (
+                                    <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
+                                      <button className={styles.sendBtn} onClick={acceptGame} style={{ background: '#10b981', color: 'white', padding: '6px 12px' }}>Accept</button>
+                                      <button className={styles.sendBtn} onClick={declineGame} style={{ padding: '6px 12px' }}>Decline</button>
+                                    </div>
+                                  )
+                                )}
+
+                                {game.status === 'ongoing' && (
+                                  <button className={styles.sendBtn} onClick={() => makeMove('roll')} style={{ width: '100%' }}>Roll!</button>
+                                )}
+                                {game.status === 'finished' && (
+                                  <button className={styles.sendBtn} onClick={() => startNewGame(other, 'dice')} style={{ width: '100%' }}>Roll Again</button>
+                                )}
+                              </div>
+                            );
+                          }
+
                           return (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                               <button className={styles.sendBtn} onClick={() => startNewGame(other, 'tictactoe')}>Start Tic-Tac-Toe</button>
                               <button className={styles.sendBtn} onClick={() => startNewGame(other, 'coinflip')}>Start Coin Flip</button>
+                              <button className={styles.sendBtn} onClick={() => startNewGame(other, 'dice')}>Start Dice Roll</button>
                             </div>
                           );
                         })()

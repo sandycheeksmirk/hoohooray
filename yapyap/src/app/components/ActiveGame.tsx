@@ -18,12 +18,13 @@ export default function ActiveGame({ game, user, opponent, onMove, onClose, onRe
     const isTicTacToe = game.type === 'tictactoe' || !game.type; // Default to tictactoe for backward compat
     const isRPS = game.type === 'rps';
     const isCoinFlip = game.type === 'coinflip';
+    const isDice = game.type === 'dice';
 
     return (
         <div className={styles.settingsPanel} role="dialog" aria-modal="true" style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: 320, zIndex: 100, background: 'var(--panel)', color: 'var(--accent-1)' }}>
             <div className={styles.settingsInner}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <h3>{isRPS ? 'Rock Paper Scissors' : isCoinFlip ? 'Coin Flip' : 'Tic-Tac-Toe'}</h3>
+                    <h3>{isRPS ? 'Rock Paper Scissors' : isCoinFlip ? 'Coin Flip' : isDice ? 'Dice Roll' : 'Tic-Tac-Toe'}</h3>
                     <button className={styles.sendBtn} onClick={onClose} style={{ padding: '4px 8px', fontSize: 12 }}>✕</button>
                 </div>
 
@@ -59,6 +60,10 @@ export default function ActiveGame({ game, user, opponent, onMove, onClose, onRe
 
                 {game.status !== 'pending' && isCoinFlip && (
                     <CoinFlipBoard game={game} user={user} onMove={onMove} />
+                )}
+
+                {game.status !== 'pending' && isDice && (
+                    <DiceBoard game={game} user={user} onMove={onMove} />
                 )}
 
                 <div style={{ marginTop: 16, textAlign: 'center', minHeight: 24 }}>
@@ -100,6 +105,13 @@ function getStatusText(game: any, user: any, opponent: any) {
             return game.winner === user.uid ? 'You Won!' : 'You Lost';
         }
         return 'Flipping...';
+    }
+
+    if (game.type === 'dice') {
+        if (game.status === 'finished') {
+            return `You rolled a ${game.result || '?'}`;
+        }
+        return 'Rolling...';
     }
 
     // Tic Tac Toe
@@ -202,6 +214,26 @@ function CoinFlipBoard({ game, user, onMove }: any) {
                     style={{ width: '100%', padding: '12px' }}
                 >
                     Flip Coin
+                </button>
+            )}
+        </div>
+
+    );
+}
+
+function DiceBoard({ game, user, onMove }: any) {
+    return (
+        <div style={{ textAlign: 'center', padding: 20 }}>
+            <div style={{ fontSize: 48, marginBottom: 16 }}>
+                {game.status === 'finished' ? `🎲 ${game.result}` : '🎲 ❓'}
+            </div>
+            {game.status === 'ongoing' && (
+                <button
+                    className={styles.sendBtn}
+                    onClick={() => onMove('roll')}
+                    style={{ width: '100%', padding: '12px' }}
+                >
+                    Roll Dice
                 </button>
             )}
         </div>
