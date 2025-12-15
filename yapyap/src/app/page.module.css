@@ -241,6 +241,30 @@
   cursor: pointer;
 }
 
+.settingsPanel {
+  position: absolute;
+  right: 20px;
+  top: 84px;
+  background: var(--panel);
+  border: 1px solid rgba(0,0,0,0.12);
+  padding: 12px;
+  border-radius: 8px;
+  z-index: 40;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+}
+
+.settingsInner {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.settingsInner h3 {
+  margin: 0 0 6px 0;
+}
+
+.settingsInner label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+
 /* Format variants */
 [data-format="compact"] .chatItem { padding: 6px; }
 [data-format="compact"] .msg { padding: 6px 8px; max-width: 85%; border-radius: 8px; font-size: 13px; }
