@@ -229,6 +229,8 @@ export default function ChatClient() {
   const [friendStatus, setFriendStatus] = useState<string | null>(null);
   const [pendingRequests, setPendingRequests] = useState<Array<any>>([]);
   const [addFriendOpen, setAddFriendOpen] = useState(false);
+  const [gameOpen, setGameOpen] = useState(false);
+  const [game, setGame] = useState<any>(null);
   const [friendsList, setFriendsList] = useState<Array<{ uid: string; username?: string; name?: string; photo?: string }>>([]);
 
   async function reserveUsername(name: string) {
@@ -327,6 +329,91 @@ export default function ChatClient() {
     }
     loadFriends();
   }, [profile?.friends]);
+
+  // watch selected chat doc for game state updates
+  useEffect(() => {
+    if (!selected) {
+      setGame(null);
+      return;
+    }
+    const chatRef = doc(db, "chats", selected);
+    const unsub = onSnapshot(chatRef, (snap) => {
+      const data = snap.exists() ? (snap.data() as any) : null;
+      setGame(data?.game || null);
+    });
+    return () => unsub();
+  }, [selected]);
+
+  function checkWinner(board: Array<string | null>) {
+    const lines = [
+      [0,1,2],[3,4,5],[6,7,8],
+      [0,3,6],[1,4,7],[2,5,8],
+      [0,4,8],[2,4,6]
+    ];
+    for (const [a,b,c] of lines) {
+      if (board[a] && board[a] === board[b] && board[a] === board[c]) return board[a];
+    }
+    return null;
+  }
+
+  async function startGame() {
+    if (!user || !selected) return;
+    const chatRef = doc(db, "chats", selected);
+    try {
+      const snap = await getDoc(chatRef);
+      if (!snap.exists()) return setFriendStatus("Chat missing");
+      const members = (snap.data() as any).members as string[] | undefined;
+      if (!members || members.length !== 2) return setFriendStatus("Games only available in 1:1 chats");
+      const sorted = [...members].sort();
+      const marks: Record<string, string> = {} as any;
+      marks[sorted[0]] = "X";
+      marks[sorted[1]] = "O";
+      await updateDoc(chatRef, {
+        game: { board: Array(9).fill(null), turn: sorted[0], marks, status: "ongoing", startedAt: serverTimestamp() },
+        updatedAt: serverTimestamp()
+      } as any);
+      setGameOpen(true);
+    } catch (e) {
+      console.error(e);
+      setFriendStatus("Could not start game");
+    }
+  }
+
+  async function makeMove(index: number) {
+    if (!user || !selected) return;
+    const chatRef = doc(db, "chats", selected);
+    try {
+      await runTransaction(db, async (tx) => {
+        const snap = await tx.get(chatRef as any);
+        if (!snap.exists()) throw new Error("no chat");
+        const g = (snap.data() as any).game;
+        if (!g || g.status !== "ongoing") throw new Error("no game");
+        if (g.turn !== user.uid) throw new Error("not your turn");
+        const board = g.board || Array(9).fill(null);
+        if (board[index]) throw new Error("occupied");
+        const newBoard = [...board];
+        const mark = g.marks[user.uid];
+        newBoard[index] = mark;
+        const winnerMark = checkWinner(newBoard);
+        let status = "ongoing";
+        let winner: string | null = null;
+        let nextTurn: string | null = null;
+        if (winnerMark) {
+          status = "finished";
+          winner = Object.keys(g.marks).find((k) => g.marks[k] === winnerMark) || null;
+        } else if (newBoard.every(Boolean)) {
+          status = "finished";
+          winner = null;
+        } else {
+          nextTurn = Object.keys(g.marks).find((k) => k !== user.uid) || null;
+        }
+        tx.update(chatRef as any, { game: { ...g, board: newBoard, turn: nextTurn, status, winner, updatedAt: serverTimestamp() }, updatedAt: serverTimestamp() } as any);
+      });
+    } catch (e) {
+      console.error(e);
+      setFriendStatus("Move failed");
+    }
+  }
 
   // open notifications when new friend requests arrive
   useEffect(() => {
@@ -656,6 +743,27 @@ export default function ChatClient() {
                 Settings
               </button>
 
+              {/* Game button for 1:1 chats */}
+              {chats.find((c) => c.id === selected && c.members && c.members.length === 2) && (
+                <button
+                  aria-label="Play game"
+                  title="Play Tic-Tac-Toe"
+                  onClick={async () => {
+                    const cur = chats.find((c) => c.id === selected);
+                    if (!cur) return;
+                    if (!profile?.username) { setSettingsOpen(true); setUsernameStatus("Create an ID to play"); return; }
+                    if (!game || game.status !== "ongoing") {
+                      await startGame();
+                    }
+                    setGameOpen((s) => !s);
+                  }}
+                  className={styles.sendBtn}
+                  style={{ padding: 8, minWidth: 84 }}
+                >
+                  🎮 Game
+                </button>
+              )}
+
               
             </div>
           </header>
@@ -748,6 +856,43 @@ export default function ChatClient() {
                 {friendStatus && <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 6 }}>{friendStatus}</div>}
                 <div style={{ marginTop: 8, display: "flex", gap: 8 }}>
                   <button className={styles.sendBtn} onClick={() => setAddFriendOpen(false)}>Close</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {gameOpen && (
+            <div className={styles.settingsPanel} role="dialog" aria-modal="true" style={{ left: 480 }}>
+              <div className={styles.settingsInner}>
+                <h3>Tic-Tac-Toe</h3>
+                <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 8 }}>Play with your friend in this chat.</div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8, width: 240 }}>
+                  {Array.from({ length: 9 }).map((_, i) => (
+                    <button
+                      key={i}
+                      onClick={() => { if (game && game.status === "ongoing" && game.turn === user?.uid) makeMove(i); }}
+                      style={{ height: 64, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.03)", cursor: game && game.status === "ongoing" && game.turn === user?.uid ? "pointer" : "default" }}
+                    >
+                      {game?.board?.[i] || ""}
+                    </button>
+                  ))}
+                </div>
+                <div style={{ marginTop: 10 }}>
+                  <div style={{ fontSize: 13 }}>
+                    {game ? (
+                      game.status === "ongoing" ? (
+                        <div>Turn: {friendsList.find((f) => f.uid === game.turn)?.username || (game.turn === user?.uid ? "You" : game.turn)}</div>
+                      ) : (
+                        <div>{game.winner ? `Winner: ${friendsList.find((f) => f.uid === game.winner)?.username || game.winner}` : "Draw"}</div>
+                      )
+                    ) : (
+                      <div>No active game</div>
+                    )}
+                  </div>
+                </div>
+                <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
+                  <button className={styles.sendBtn} onClick={() => { startGame(); }}>Start Game</button>
+                  <button className={styles.sendBtn} onClick={() => setGameOpen(false)}>Close</button>
                 </div>
               </div>
             </div>
