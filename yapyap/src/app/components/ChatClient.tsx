@@ -273,7 +273,7 @@ export default function ChatClient() {
   }
 
   useEffect(() => {
-    if (!user) {
+    if (!user || !profile?.username) {
       setChats([]);
       return;
     }
@@ -285,10 +285,10 @@ export default function ChatClient() {
       }
     });
     return () => unsub();
-  }, []);
+  }, [user?.uid, profile?.username]);
 
   useEffect(() => {
-    if (!user || !selected) return;
+    if (!user || !selected || !profile?.username) return;
     const q = query(
       collection(db, `chats/${selected}/messages`),
       orderBy("createdAt", "asc")
@@ -299,11 +299,16 @@ export default function ChatClient() {
       );
     });
     return () => unsub();
-  }, [selected]);
+  }, [selected, profile?.username]);
 
   async function sendMessage(e?: React.FormEvent) {
     e?.preventDefault();
     if (!input.trim()) return;
+    if (!profile?.username) {
+      setUsernameStatus("You must set an ID before sending messages");
+      setSettingsOpen(true);
+      return;
+    }
     if (!selected) {
       // create a new chat
       const newChatRef = doc(collection(db, "chats"));
@@ -341,6 +346,26 @@ export default function ChatClient() {
               Sign in with Google
             </button>
           </div>
+        </div>
+      </main>
+    );
+  }
+
+  // enforce username creation before allowing use
+  if (!profile?.username) {
+    return (
+      <main className={styles.root} style={{ padding: 12 }}>
+        <div className={styles.welcome}>
+          <h1>Welcome{user?.name ? `, ${user.name}` : ""}</h1>
+          <p>You must create an ID before using Yapyap.</p>
+          <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+            <input placeholder="Choose an ID (a-z0-9_- )" value={usernameInput} onChange={(e) => setUsernameInput(e.target.value)} />
+            <button className={styles.sendBtn} onClick={() => reserveUsername(usernameInput)} style={{ padding: "10px 18px" }}>
+              Save ID
+            </button>
+            <button className={styles.sendBtn} onClick={() => signOutUser()} style={{ padding: "10px 18px" }}>Sign out</button>
+          </div>
+          {usernameStatus && <div style={{ marginTop: 8, fontSize: 13, color: "var(--muted)" }}>{usernameStatus}</div>}
         </div>
       </main>
     );
@@ -487,7 +512,7 @@ export default function ChatClient() {
                     <button onClick={() => signIn()} className={styles.sendBtn}>Sign in with Google</button>
                   )}
 
-                  <button onClick={() => setSettingsOpen(false)} className={styles.sendBtn}>Close</button>
+                  <button onClick={() => setSettingsOpen(false)} className={styles.sendBtn} disabled={!profile?.username} title={!profile?.username ? "Set an ID to close settings" : undefined}>Close</button>
                 </div>
               </div>
             </div>
