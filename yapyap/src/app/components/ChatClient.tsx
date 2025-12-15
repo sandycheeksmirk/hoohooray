@@ -356,7 +356,21 @@ export default function ChatClient() {
       await updateDoc(doc(db, "users", user!.uid), { friends: arrayUnion(otherUid) } as any);
       await updateDoc(doc(db, "users", otherUid), { friends: arrayUnion(user!.uid) } as any);
       setFriendStatus("Friend request accepted");
+      // fetch the friend's profile and add to local friends list immediately
+      try {
+        const otherDoc = await getDoc(doc(db, "users", otherUid));
+        if (otherDoc.exists()) {
+          const data = otherDoc.data() as any;
+          setFriendsList((prev) => {
+            if (prev.find((p) => p.uid === otherUid)) return prev;
+            return [...prev, { uid: otherDoc.id, username: data.username, name: data.name, photo: data.photo }];
+          });
+        }
+      } catch (e) {
+        /* ignore */
+      }
       setSelected(chatId);
+      setNotificationsOpen(false);
     } catch (e) {
       console.error(e);
       setFriendStatus("Error accepting request");
