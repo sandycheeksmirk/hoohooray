@@ -1299,9 +1299,23 @@ export default function ChatClient() {
                                     </button>
                                   ))}
                                 </div>
-                                <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center' }}>
-                                  <div style={{ fontSize: 13 }}>{game.status === 'ongoing' ? (game.turn === user?.uid ? 'Your move' : 'Waiting...') : (game.status === 'pending' ? 'Pending' : 'Finished')}</div>
-                                  {game.status !== 'ongoing' && (
+                                <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                                  {game.status === 'pending' ? (
+                                    game.requestedBy === user?.uid ? (
+                                      <div style={{ fontSize: 13, color: 'var(--muted)' }}>Request Sent</div>
+                                    ) : (
+                                      <div style={{ display: 'flex', gap: 6 }}>
+                                        <button className={styles.sendBtn} onClick={acceptGame} style={{ background: '#10b981', color: 'white', padding: '6px 10px' }}>Accept</button>
+                                        <button className={styles.sendBtn} onClick={declineGame} style={{ padding: '6px 10px' }}>Decline</button>
+                                      </div>
+                                    )
+                                  ) : (
+                                    <div style={{ fontSize: 13 }}>
+                                      {game.status === 'ongoing' ? (game.turn === user?.uid ? 'Your move' : 'Waiting...') : 'Finished'}
+                                    </div>
+                                  )}
+
+                                  {game.status === 'finished' && (
                                     <button className={styles.sendBtn} onClick={() => startNewGame(other, 'tictactoe')}>Restart</button>
                                   )}
                                 </div>
@@ -1316,14 +1330,25 @@ export default function ChatClient() {
                                   {game.status === 'finished' ? (game.result === 'heads' ? '🪙' : '🦅') : '❓'}
                                 </div>
                                 <div style={{ marginBottom: 12, fontSize: 14, fontWeight: 600 }}>
-                                  {game.status === 'finished' ? (game.result === 'heads' ? 'Heads' : 'Tails') : 'Flipping...'}
+                                  {game.status === 'finished' ? (game.result === 'heads' ? 'Heads' : 'Tails') : (game.status === 'pending' ? 'Pending...' : 'Flipping...')}
                                 </div>
+
+                                {game.status === 'pending' && (
+                                  game.requestedBy === user?.uid ? (
+                                    <div style={{ fontSize: 13, color: 'var(--muted)' }}>Waiting for accept...</div>
+                                  ) : (
+                                    <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
+                                      <button className={styles.sendBtn} onClick={acceptGame} style={{ background: '#10b981', color: 'white', padding: '6px 12px' }}>Accept</button>
+                                      <button className={styles.sendBtn} onClick={declineGame} style={{ padding: '6px 12px' }}>Decline</button>
+                                    </div>
+                                  )
+                                )}
+
                                 {game.status === 'ongoing' && (
                                   <button className={styles.sendBtn} onClick={() => makeMove('flip')} style={{ width: '100%' }}>Flip!</button>
                                 )}
                                 {game.status === 'finished' && (
                                   <button className={styles.sendBtn} onClick={() => startNewGame(other, 'coinflip')} style={{ width: '100%' }}>Flip Again</button>
-                                )}
                               </div>
                             );
                           }
