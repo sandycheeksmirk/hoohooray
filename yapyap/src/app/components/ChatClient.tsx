@@ -29,6 +29,8 @@ type Message = {
   text: string;
   me?: boolean;
   createdAt?: any;
+  uid?: string;
+  name?: string;
 };
 
 export default function ChatClient() {
