@@ -536,7 +536,10 @@ export default function ChatClient() {
           </div>
 
           <div style={{ padding: 10, borderBottom: "1px solid rgba(0,0,0,0.06)" }}>
-            <div style={{ fontWeight: 700, marginBottom: 8 }}>Friends</div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <div style={{ fontWeight: 700 }}>Friends</div>
+              <button className={styles.sendBtn} onClick={() => { if (!profile?.username) { setSettingsOpen(true); setUsernameStatus("Create an ID to add friends"); return; } setAddFriendOpen((s) => !s); }} style={{ padding: "6px 10px" }}>Add</button>
+            </div>
             <ul style={{ padding: 0, margin: 0, listStyle: "none" }}>
               {friendsList.length === 0 ? (
                 <li style={{ fontSize: 13, color: "var(--muted)" }}>No friends yet</li>
@@ -638,22 +641,7 @@ export default function ChatClient() {
                 Settings
               </button>
 
-              <button
-                aria-label="Add friend"
-                title="Add friend"
-                onClick={() => {
-                  if (!profile?.username) {
-                    setSettingsOpen(true);
-                    setUsernameStatus("Create an ID to add friends");
-                    return;
-                  }
-                  setAddFriendOpen((s) => !s);
-                }}
-                className={styles.sendBtn}
-                style={{ padding: 8, minWidth: 90 }}
-              >
-                Add Friend
-              </button>
+              
             </div>
           </header>
 
@@ -715,12 +703,7 @@ export default function ChatClient() {
                   )}
                   {usernameStatus && <div style={{ fontSize: 13, color: "var(--muted)" }}>{usernameStatus}</div>}
 
-                  <h4 style={{ margin: "10px 0 6px" }}>Add friend by ID</h4>
-                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                    <input placeholder="friend-id" value={friendId} onChange={(e) => setFriendId(e.target.value)} />
-                    <button className={styles.sendBtn} onClick={() => addFriendById(friendId)}>Add</button>
-                  </div>
-                  {friendStatus && <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 6 }}>{friendStatus}</div>}
+                
                 </div>
 
                 <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
@@ -740,7 +723,7 @@ export default function ChatClient() {
           )}
 
           {addFriendOpen && (
-            <div className={styles.settingsPanel} role="dialog" aria-modal="true" style={{ right: 140 }}>
+            <div className={styles.settingsPanel} role="dialog" aria-modal="true" style={{ left: 280 }}>
               <div className={styles.settingsInner}>
                 <h3>Add Friend</h3>
                 <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
