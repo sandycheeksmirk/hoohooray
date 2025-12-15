@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import styles from "../page.module.css";
-import { db } from "../lib/firebase..";
+import { db } from "../lib/firebase";
 import {
   collection,
   query,
@@ -34,6 +34,24 @@ export default function ChatClient() {
   const [selected, setSelected] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
+  const [theme, setTheme] = useState<"light" | "dark" | "bw">(() => {
+    try {
+      const t = localStorage.getItem("theme");
+      if (t === "light" || t === "dark" || t === "bw") return t;
+    } catch (e) {
+      /* ignore */
+    }
+    return "bw";
+  });
+
+  useEffect(() => {
+    try {
+      document.documentElement.setAttribute("data-theme", theme);
+      localStorage.setItem("theme", theme);
+    } catch (e) {
+      /* ignore in SSR */
+    }
+  }, [theme]);
 
   useEffect(() => {
     const q = query(collection(db, "chats"), orderBy("updatedAt", "desc"));
@@ -126,6 +144,17 @@ export default function ChatClient() {
                 {chats.find((c) => c.id === selected)?.name || "No chat selected"}
               </div>
               <div className={styles.headerStatus}>online</div>
+            </div>
+            <div className={styles.themeSelect}>
+              <select
+                aria-label="Theme"
+                value={theme}
+                onChange={(e) => setTheme(e.target.value as any)}
+              >
+                <option value="bw">Black & White</option>
+                <option value="dark">Dark</option>
+                <option value="light">Light</option>
+              </select>
             </div>
           </header>
 
