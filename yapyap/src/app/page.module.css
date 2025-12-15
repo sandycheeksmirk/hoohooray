@@ -307,6 +307,19 @@
 .notificationItem { padding: 8px; border-radius: 6px; cursor: pointer; }
 .notificationItem:hover { background: rgba(0,0,0,0.04); }
 
+.welcome {
+  width: 100%;
+  min-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+}
+.welcome h1 { margin: 0; font-size: 28px; }
+.welcome p { margin: 0; color: var(--muted); }
+
 /* Format variants */
 [data-format="compact"] .chatItem { padding: 6px; }
 [data-format="compact"] .msg { padding: 6px 8px; max-width: 85%; border-radius: 8px; font-size: 13px; }

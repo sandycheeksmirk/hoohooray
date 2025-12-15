@@ -244,18 +244,24 @@ export default function ChatClient() {
     setInput("");
   }
 
-  return (
-    <main className={styles.root} style={{ padding: 12 }}>
-      {!user ? (
-        <div style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", minHeight: "60vh" }}>
-          <div style={{ textAlign: "center" }}>
-            <h2 style={{ marginBottom: 12 }}>Sign in to continue</h2>
+  if (!user) {
+    return (
+      <main className={styles.root} style={{ padding: 12 }}>
+        <div className={styles.welcome}>
+          <h1>Welcome to Yapyap</h1>
+          <p>Sign in with Google to continue to your chats.</p>
+          <div style={{ marginTop: 12 }}>
             <button className={styles.sendBtn} onClick={() => signIn()} style={{ padding: "10px 18px" }}>
               Sign in with Google
             </button>
           </div>
         </div>
-      ) : null}
+      </main>
+    );
+  }
+
+  return (
+    <main className={styles.root} style={{ padding: 12 }}>
       <div className={styles.container}>
         <aside className={styles.sidebar}>
           <div className={styles.logo}>Telegram — BW (Live)</div>
