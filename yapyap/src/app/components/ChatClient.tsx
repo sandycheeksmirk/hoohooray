@@ -171,7 +171,7 @@ export default function ChatClient() {
   }
 
   const [user, setUser] = useState<{ uid: string; name?: string; photo?: string } | null>(null);
-  const [profile, setProfile] = useState<{ username?: string; name?: string; friends?: string[] } | null>(null);
+  const [profile, setProfile] = useState<{ username?: string; name?: string; friends?: string[]; blocked?: boolean } | null>(null);
 
   useEffect(() => {
     if (!auth) return;
@@ -852,6 +852,16 @@ export default function ChatClient() {
     await updateDoc(chatRef, { last: input, lastBy: user?.name || null, updatedAt: serverTimestamp() });
 
     setInput("");
+  }
+
+  if (profile?.blocked) {
+    return (
+      <main className={styles.root} style={{ padding: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', flexDirection: 'column', gap: 20 }}>
+        <h1 style={{ fontSize: 40 }}>🚫 Account Blocked</h1>
+        <p>Your account has been suspended by an administrator.</p>
+        <button className={styles.sendBtn} onClick={() => signOutUser()} style={{ padding: "10px 18px" }}>Sign Out</button>
+      </main>
+    );
   }
 
   if (!user) {
