@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import styles from "../page.module.css";
 import { db } from "../lib/firebase";
 import {
@@ -44,6 +44,7 @@ export default function ChatClient() {
   const [selected, setSelected] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
+  const inputRef = useRef<HTMLInputElement | null>(null);
   const [theme, setTheme] = useState<"light" | "dark" | "bw">(() => {
     try {
       const t = localStorage.getItem("theme");
@@ -392,6 +393,9 @@ export default function ChatClient() {
       });
     }
     setSelected(chatId);
+    // mark the chat as read and focus the message input so the user can type immediately
+    try { markRead(chatId); } catch (e) { /* ignore */ }
+    setTimeout(() => inputRef.current?.focus(), 120);
   }
 
   async function declineRequest(req: any) {
@@ -451,7 +455,20 @@ export default function ChatClient() {
       return;
     }
 
-    const chatMeta = chats.find((c) => c.id === selected) as Chat | undefined;
+    let chatMeta = chats.find((c) => c.id === selected) as Chat | undefined;
+    // If local chats haven't been updated yet (we just created the chat), fetch the chat doc
+    if (!chatMeta) {
+      try {
+        const chatRef = doc(db, "chats", selected as string);
+        const snap = await getDoc(chatRef);
+        if (snap.exists()) {
+          chatMeta = { id: snap.id, ...(snap.data() as any) } as Chat;
+        }
+      } catch (e) {
+        console.error("Error fetching chat", e);
+      }
+    }
+
     if (!chatMeta || !chatMeta.members || !chatMeta.members.includes(user!.uid)) {
       setFriendStatus("You can only send messages in chats with friends you added");
       setSettingsOpen(true);
@@ -802,6 +819,7 @@ export default function ChatClient() {
           <form className={styles.inputBar} onSubmit={sendMessage}>
             <input
               className={styles.messageInput}
+              ref={inputRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder="Message"
