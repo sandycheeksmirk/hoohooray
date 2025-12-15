@@ -15,6 +15,7 @@ import {
   updateDoc,
   runTransaction,
   getDoc,
+  where,
 } from "firebase/firestore";
 import { auth, googleProvider } from "../lib/firebase";
 import { onAuthStateChanged, signInWithPopup, signOut } from "firebase/auth";
@@ -24,6 +25,7 @@ type Chat = {
   name?: string;
   last?: string;
   updatedAt?: any;
+  members?: string[];
 };
 
 type Message = {
@@ -277,7 +279,11 @@ export default function ChatClient() {
       setChats([]);
       return;
     }
-    const q = query(collection(db, "chats"), orderBy("updatedAt", "desc"));
+    const q = query(
+      collection(db, "chats"),
+      where("members", "array-contains", user.uid),
+      orderBy("updatedAt", "desc")
+    );
     const unsub = onSnapshot(q, (snap) => {
       setChats(snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })));
       if (!selected && snap.docs.length) {
@@ -310,14 +316,16 @@ export default function ChatClient() {
       return;
     }
     if (!selected) {
-      // create a new chat
-      const newChatRef = doc(collection(db, "chats"));
-      await setDoc(newChatRef, {
-        name: "New Chat",
-        last: input,
-        updatedAt: serverTimestamp(),
-      });
-      setSelected(newChatRef.id);
+      setFriendStatus("Select a friend or add one by ID to start a conversation");
+      setSettingsOpen(true);
+      return;
+    }
+
+    const chatMeta = chats.find((c) => c.id === selected) as Chat | undefined;
+    if (!chatMeta || !chatMeta.members || !chatMeta.members.includes(user!.uid)) {
+      setFriendStatus("You can only send messages in chats with friends you added");
+      setSettingsOpen(true);
+      return;
     }
 
     const messagesCol = collection(db, `chats/${selected}/messages`);

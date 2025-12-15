@@ -320,6 +320,30 @@
 .welcome h1 { margin: 0; font-size: 28px; }
 .welcome p { margin: 0; color: var(--muted); }
 
+/* Sign-in card */
+.signinCardWrap { display:flex; align-items:center; justify-content:center; width:100%; min-height: 70vh; }
+.signinCard {
+  width: 420px;
+  border-radius: 18px;
+  padding: 28px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.9), rgba(245,245,245,0.95));
+  box-shadow: 0 18px 40px rgba(15,23,42,0.12), inset 0 1px 0 rgba(255,255,255,0.6);
+  border: 1px solid rgba(0,0,0,0.06);
+  text-align: center;
+}
+.signinIcon {
+  width: 56px; height:56px; border-radius:12px; margin: 0 auto 14px; display:flex; align-items:center; justify-content:center; background: linear-gradient(180deg,#fff,#f7f9fc); box-shadow: 0 6px 20px rgba(15,23,42,0.06);
+}
+.signinCard h1 { margin: 6px 0 8px; font-size: 22px; }
+.signinCard p { margin: 0 0 16px; color: var(--muted); font-size: 14px; }
+.googleBtn { display:flex; align-items:center; justify-content:center; gap:10px; width:100%; padding:14px 18px; background:#0a0a0a; color:white; border-radius:12px; border:none; cursor:pointer; font-weight:700; box-shadow: 0 6px 18px rgba(2,6,23,0.25); }
+.googleBtn svg { height:18px; width:18px; }
+.smallActions { margin-top:14px; color:var(--muted); font-size:13px; }
+
+@media (max-width: 520px) {
+  .signinCard { width: 92%; padding: 20px; }
+}
+
 /* Format variants */
 [data-format="compact"] .chatItem { padding: 6px; }
 [data-format="compact"] .msg { padding: 6px 8px; max-width: 85%; border-radius: 8px; font-size: 13px; }
