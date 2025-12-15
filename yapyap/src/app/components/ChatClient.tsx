@@ -237,6 +237,8 @@ export default function ChatClient() {
   const [addFriendOpen, setAddFriendOpen] = useState(false);
   const [gameOpen, setGameOpen] = useState(false);
   const [gameCenterOpen, setGameCenterOpen] = useState(false);
+  const [miniGameOpen, setMiniGameOpen] = useState(false);
+  const miniGameRef = useRef<HTMLDivElement | null>(null);
   const [game, setGame] = useState<any>(null);
   const [gameMenuOpen, setGameMenuOpen] = useState(false);
   const gameMenuRef = useRef<HTMLDivElement | null>(null);
@@ -466,6 +468,38 @@ export default function ChatClient() {
     const unsub = onSnapshot(chatRef, (snap) => {
       const data = snap.exists() ? (snap.data() as any) : null;
       setGame(data?.game || null);
+
+      // announce finished games once (idempotent)
+      (async () => {
+        try {
+          const g = data?.game;
+          if (g && g.status === 'finished' && !g.announced) {
+            // mark announced via transaction to avoid double-posting
+            await runTransaction(db, async (tx) => {
+              const s = await tx.get(chatRef as any);
+              if (!s.exists()) throw new Error('no chat');
+              const existing = (s.data() as any).game;
+              if (!existing || existing.status !== 'finished' || existing.announced) throw new Error('skip');
+              tx.update(chatRef as any, { 'game.announced': true, updatedAt: serverTimestamp() } as any);
+            });
+
+            // Post a system message describing the result
+            const messagesCol = collection(db, `chats/${selected}/messages`);
+            const winnerText = g.winner ? (g.winner === null ? 'It was a draw' : `Winner: ${g.winner}`) : 'Game finished';
+            await addDoc(messagesCol, {
+              text: `🎮 Game finished — ${winnerText}`,
+              uid: null,
+              name: 'System',
+              isSystem: true,
+              createdAt: serverTimestamp(),
+            });
+            await updateDoc(chatRef, { last: `🎮 ${winnerText}`, updatedAt: serverTimestamp() } as any);
+          }
+        } catch (e) {
+          if ((e as any)?.message === 'skip') return;
+          console.error('Error announcing game finish', e);
+        }
+      })();
     });
     return () => unsub();
   }, [selected]);
@@ -624,6 +658,17 @@ export default function ChatClient() {
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
   }, [gameMenuOpen]);
+
+  // close mini-game popover when clicking outside
+  useEffect(() => {
+    function onDoc(e: MouseEvent) {
+      if (miniGameOpen && miniGameRef.current && !(miniGameRef.current as any).contains(e.target)) {
+        setMiniGameOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [miniGameOpen]);
 
   async function acceptRequest(req: any) {
     try {
@@ -1212,6 +1257,88 @@ export default function ChatClient() {
                 <button type="button" className={styles.sendBtn} onClick={() => setEmojiOpen((s) => !s)} title="Emoji" aria-label="Emoji" style={{ padding: 8 }}>
                   😊
                 </button>
+                <div style={{ position: "relative" }} ref={miniGameRef}>
+                  <button type="button" className={styles.sendBtn} onClick={() => setMiniGameOpen((s) => !s)} title="Mini Game" aria-label="Mini Game" style={{ padding: 8 }}>
+                    🎲
+                  </button>
+                  {miniGameOpen && (
+                    <div style={{ position: "absolute", bottom: 56, left: 40, width: 220, background: "var(--panel, rgba(0,0,0,0.7))", padding: 8, borderRadius: 8, boxShadow: "0 6px 18px rgba(0,0,0,0.4)", zIndex: 70 }}>
+                      {/* Mini Games */}
+                      {(!selected || !chats.find(c => c.id === selected || false) || !(chats.find(c => c.id === selected)?.members?.length === 2)) ? (
+                        <div style={{ fontSize: 13, color: "var(--muted)" }}>Open a 1:1 chat to play</div>
+                      ) : (
+                        (() => {
+                          const chat = chats.find(c => c.id === selected);
+                          const other = chat?.members?.find((m: string) => m !== user?.uid);
+                          if (!other) return <div style={{ fontSize: 13 }}>No opponent</div>;
+
+                          if (game && (game.type === 'tictactoe' || !game.type)) {
+                            return (
+                              <div>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 56px)', gap: 6 }}>
+                                  {(game.board || Array(9).fill(null)).map((cell: any, i: number) => (
+                                    <button
+                                      key={i}
+                                      onClick={() => { if (game.status === 'ongoing' && game.turn === user?.uid && !cell) makeMove(i); }}
+                                      className={styles.sendBtn}
+                                      style={{
+                                        width: 56,
+                                        height: 56,
+                                        padding: 0,
+                                        fontSize: 24,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        background: 'transparent',
+                                        border: '1px solid var(--muted)',
+                                        color: cell === 'X' ? 'var(--accent)' : 'var(--accent-1)',
+                                        cursor: (game.status === 'ongoing' && game.turn === user?.uid && !cell) ? 'pointer' : 'default'
+                                      }}
+                                    >
+                                      {cell || ''}
+                                    </button>
+                                  ))}
+                                </div>
+                                <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center' }}>
+                                  <div style={{ fontSize: 13 }}>{game.status === 'ongoing' ? (game.turn === user?.uid ? 'Your move' : 'Waiting...') : (game.status === 'pending' ? 'Pending' : 'Finished')}</div>
+                                  {game.status !== 'ongoing' && (
+                                    <button className={styles.sendBtn} onClick={() => startNewGame(other, 'tictactoe')}>Restart</button>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          }
+
+                          if (game && game.type === 'coinflip') {
+                            return (
+                              <div style={{ textAlign: 'center', padding: '12px 0' }}>
+                                <div style={{ fontSize: 40, marginBottom: 8 }}>
+                                  {game.status === 'finished' ? (game.result === 'heads' ? '🪙' : '🦅') : '❓'}
+                                </div>
+                                <div style={{ marginBottom: 12, fontSize: 14, fontWeight: 600 }}>
+                                  {game.status === 'finished' ? (game.result === 'heads' ? 'Heads' : 'Tails') : 'Flipping...'}
+                                </div>
+                                {game.status === 'ongoing' && (
+                                  <button className={styles.sendBtn} onClick={() => makeMove('flip')} style={{ width: '100%' }}>Flip!</button>
+                                )}
+                                {game.status === 'finished' && (
+                                  <button className={styles.sendBtn} onClick={() => startNewGame(other, 'coinflip')} style={{ width: '100%' }}>Flip Again</button>
+                                )}
+                              </div>
+                            );
+                          }
+
+                          return (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                              <button className={styles.sendBtn} onClick={() => startNewGame(other, 'tictactoe')}>Start Tic-Tac-Toe</button>
+                              <button className={styles.sendBtn} onClick={() => startNewGame(other, 'coinflip')}>Start Coin Flip</button>
+                            </div>
+                          );
+                        })()
+                      )}
+                    </div>
+                  )}
+                </div>
                 {emojiOpen && (
                   <div ref={emojiPanelRef} style={{ position: "absolute", bottom: 56, left: 8, width: 260, background: "var(--panel, rgba(0,0,0,0.7))", padding: 8, borderRadius: 8, boxShadow: "0 6px 18px rgba(0,0,0,0.4)", zIndex: 60 }}>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
