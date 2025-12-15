@@ -449,6 +449,13 @@ export default function ChatClient() {
     loadFriends();
   }, [profile?.friends]);
 
+  // auto-open game request if needed
+  useEffect(() => {
+    if (game && game.status === 'pending' && game.requestedBy !== user?.uid && !gameOpen) {
+      setGameOpen(true);
+    }
+  }, [game?.status, game?.requestedBy]);
+
   // watch selected chat doc for game state updates
   useEffect(() => {
     if (!selected) {
@@ -921,15 +928,27 @@ export default function ChatClient() {
               {/* Game button for 1:1 chats */}
               {chats.find((c) => c.id === selected && c.members && c.members.length === 2) && (
                 <div style={{ position: "relative" }} ref={gameMenuRef}>
-                  <button
-                    aria-label="Games"
-                    title="Games"
-                    onClick={() => setGameMenuOpen((s) => !s)}
-                    className={styles.sendBtn}
-                    style={{ padding: 8, minWidth: 84 }}
-                  >
-                    🎮 Game
-                  </button>
+                  {game && game.status === 'pending' && game.requestedBy !== user?.uid ? (
+                    <button
+                      aria-label="Accept Game"
+                      title="Accept Game Request"
+                      onClick={() => setGameOpen(true)}
+                      className={styles.sendBtn}
+                      style={{ padding: 8, minWidth: 84, background: '#10b981', color: '#fff', border: '1px solid rgba(0,0,0,0.1)' }}
+                    >
+                      📩 Accept!
+                    </button>
+                  ) : (
+                    <button
+                      aria-label="Games"
+                      title="Games"
+                      onClick={() => setGameMenuOpen((s) => !s)}
+                      className={styles.sendBtn}
+                      style={{ padding: 8, minWidth: 84 }}
+                    >
+                      🎮 Game
+                    </button>
+                  )}
                   {gameMenuOpen && (
                     <div style={{ position: "absolute", right: 0, top: 40, width: 180, background: "var(--panel, rgba(0,0,0,0.7))", borderRadius: 6, padding: 8, boxShadow: "0 6px 18px rgba(0,0,0,0.4)", zIndex: 70 }}>
                       <button
