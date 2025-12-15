@@ -242,8 +242,10 @@ export default function ChatClient() {
   const [game, setGame] = useState<any>(null);
   const [gameMenuOpen, setGameMenuOpen] = useState(false);
   const gameMenuRef = useRef<HTMLDivElement | null>(null);
-  const [friendsList, setFriendsList] = useState<Array<{ uid: string; username?: string; name?: string; photo?: string }>>([]);
+  const [viewProfileId, setViewProfileId] = useState<string | null>(null);
+  const [friendsList, setFriendsList] = useState<Array<{ uid: string; username?: string; name?: string; bio?: string; photo?: string }>>([]);
   const [profileEdit, setProfileEdit] = useState({ name: "", bio: "" });
+  const [viewProfileId, setViewProfileId] = useState<string | null>(null);
 
   useEffect(() => {
     if (settingsOpen && profile) {
@@ -944,12 +946,16 @@ export default function ChatClient() {
                 <li style={{ fontSize: 13, color: "var(--muted)" }}>No friends yet</li>
               ) : (
                 friendsList.map((f) => (
-                  <li key={f.uid} className={styles.chatItem} style={{ cursor: "pointer" }} onClick={() => openDM(f.uid, f.username || f.name || f.uid)}>
-                    <div style={{ display: "flex", gap: 10, alignItems: "center", width: "100%" }}>                    {f.photo ? (
-                      <img src={f.photo} alt={f.username || f.name || "avatar"} style={{ width: 44, height: 44, borderRadius: 22, objectFit: "cover" }} />
-                    ) : (
-                      <div className={styles.chatAvatar} />
-                    )}                      <div style={{ flex: 1, minWidth: 0 }}>
+                  <li key={f.uid} className={styles.chatItem} style={{ cursor: "pointer" }}>
+                    <div style={{ display: "flex", gap: 10, alignItems: "center", width: "100%" }}>
+                      <div onClick={(e) => { e.stopPropagation(); setViewProfileId(f.uid); }} style={{ cursor: 'alias' }}>
+                        {f.photo ? (
+                          <img src={f.photo} alt={f.username || f.name || "avatar"} style={{ width: 44, height: 44, borderRadius: 22, objectFit: "cover" }} />
+                        ) : (
+                          <div className={styles.chatAvatar} />
+                        )}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }} onClick={() => openDM(f.uid, f.username || f.name || f.uid)}>
                         <div style={{ fontWeight: 600 }}>{f.username || f.name || f.uid}</div>
                         {f.name && <div style={{ fontSize: 12, color: "var(--muted)" }}>{f.name}</div>}
                       </div>
@@ -992,334 +998,375 @@ export default function ChatClient() {
                   const label = chat.name || (friend?.username || friend?.name || other);
                   return (
                     <>
-                      {friend?.photo ? (
-                        <img src={friend.photo} alt={label} style={{ width: 44, height: 44, borderRadius: 22, objectFit: "cover" }} />
-                      ) : (
-                        <div className={styles.headerAvatar} />
-                      )}
-                      <div className={styles.headerMeta}>
-                        <div className={styles.headerName}>{label}</div>
-                        <div className={styles.headerStatus}>online</div>
-                      </div>
-                    </>
-                  );
+                      <div style={{ cursor: 'pointer' }} onClick={() => setViewProfileId(other)}>
+                        <div style={{ cursor: 'pointer' }} onClick={() => setViewProfileId(other)}>
+                          {friend?.photo ? (
+                            <img src={friend.photo} alt={label} style={{ width: 44, height: 44, borderRadius: 22, objectFit: "cover" }} />
+                          ) : (
+                            <div className={styles.headerAvatar} />
+                          )}
+                        </div>
+                      </>
+                      );
+                      );
                 }
                 // If a chat isn't present locally, try to infer the label from the selected DM id
                 const fallbackLabel = (() => {
                   const found = chats.find((c) => c.id === selected);
-                  if (found) return found.name;
-                  if (selected && selected.startsWith("dm_") && user) {
+                      if (found) return found.name;
+                      if (selected && selected.startsWith("dm_") && user) {
                     const parts = selected.split("_");
-                    if (parts.length === 3) {
+                      if (parts.length === 3) {
                       const other = parts[1] === user.uid ? parts[2] : parts[1];
                       const friend = friendsList.find((f) => f.uid === other);
                       return friend ? (friend.username || friend.name || other) : other;
                     }
                   }
-                  return "No chat selected";
+                      return "No chat selected";
                 })();
 
-                return (
-                  <>
-                    <div className={styles.headerAvatar} />
-                    <div className={styles.headerMeta}>
-                      <div className={styles.headerName}>{fallbackLabel}</div>
-                      <div className={styles.headerStatus}>online</div>
-                    </div>
-                  </>
-                );
+                      return (
+                      <>
+                        <div className={styles.headerAvatar} />
+                        <div className={styles.headerMeta}>
+                          <div className={styles.headerName}>{fallbackLabel}</div>
+                          <div className={styles.headerStatus}>online</div>
+                        </div>
+                      </>
+                      );
               })()
             }
 
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <button
-                aria-label="Notifications"
-                title="Notifications"
-                onClick={() => setNotificationsOpen((s) => !s)}
-                className={styles.notifBtn}
-                style={{ position: "relative" }}
-              >
-                🔔
-                {(unreadChats.length + pendingRequests.length) > 0 && (
-                  <span className={styles.badge}>{unreadChats.length + pendingRequests.length}</span>
-                )}
-              </button>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <button
+                          aria-label="Notifications"
+                          title="Notifications"
+                          onClick={() => setNotificationsOpen((s) => !s)}
+                          className={styles.notifBtn}
+                          style={{ position: "relative" }}
+                        >
+                          🔔
+                          {(unreadChats.length + pendingRequests.length) > 0 && (
+                            <span className={styles.badge}>{unreadChats.length + pendingRequests.length}</span>
+                          )}
+                        </button>
 
-              <button
-                aria-label="Open settings"
-                title="Settings"
-                onClick={() => setSettingsOpen(true)}
-                className={styles.sendBtn}
-                style={{ padding: 8, minWidth: 90 }}
-              >
-                Settings
-              </button>
+                        <button
+                          aria-label="Open settings"
+                          title="Settings"
+                          onClick={() => setSettingsOpen(true)}
+                          className={styles.sendBtn}
+                          style={{ padding: 8, minWidth: 90 }}
+                        >
+                          Settings
+                        </button>
 
-              {/* Game button for 1:1 chats */}
-              {chats.find((c) => c.id === selected && c.members && c.members.length === 2) && (
-                <div style={{ position: "relative" }} ref={gameMenuRef}>
-                  {game && game.status === 'pending' && game.requestedBy !== user?.uid ? (
-                    <button
-                      aria-label="Accept Game"
-                      title="Accept Game Request"
-                      onClick={() => setGameOpen(true)}
-                      className={styles.sendBtn}
-                      style={{ padding: 8, minWidth: 84, background: '#10b981', color: '#fff', border: '1px solid rgba(0,0,0,0.1)' }}
-                    >
-                      📩 Accept!
-                    </button>
-                  ) : (
-                    <button
-                      aria-label="Games"
-                      title="Games"
-                      onClick={() => setGameMenuOpen((s) => !s)}
-                      className={styles.sendBtn}
-                      style={{ padding: 8, minWidth: 84 }}
-                    >
-                      🎮 Game
-                    </button>
-                  )}
-                  {gameMenuOpen && (
-                    <div style={{ position: "absolute", right: 0, top: 40, width: 180, background: "var(--panel, rgba(0,0,0,0.7))", borderRadius: 6, padding: 8, boxShadow: "0 6px 18px rgba(0,0,0,0.4)", zIndex: 70 }}>
-                      <button
-                        className={styles.sendBtn}
-                        onClick={async () => {
-                          setGameMenuOpen(false);
-                          if (!profile?.username) { setSettingsOpen(true); setUsernameStatus("Create an ID to play"); return; }
+                        {/* Game button for 1:1 chats */}
+                        {chats.find((c) => c.id === selected && c.members && c.members.length === 2) && (
+                          <div style={{ position: "relative" }} ref={gameMenuRef}>
+                            {game && game.status === 'pending' && game.requestedBy !== user?.uid ? (
+                              <button
+                                aria-label="Accept Game"
+                                title="Accept Game Request"
+                                onClick={() => setGameOpen(true)}
+                                className={styles.sendBtn}
+                                style={{ padding: 8, minWidth: 84, background: '#10b981', color: '#fff', border: '1px solid rgba(0,0,0,0.1)' }}
+                              >
+                                📩 Accept!
+                              </button>
+                            ) : (
+                              <button
+                                aria-label="Games"
+                                title="Games"
+                                onClick={() => setGameMenuOpen((s) => !s)}
+                                className={styles.sendBtn}
+                                style={{ padding: 8, minWidth: 84 }}
+                              >
+                                🎮 Game
+                              </button>
+                            )}
+                            {gameMenuOpen && (
+                              <div style={{ position: "absolute", right: 0, top: 40, width: 180, background: "var(--panel, rgba(0,0,0,0.7))", borderRadius: 6, padding: 8, boxShadow: "0 6px 18px rgba(0,0,0,0.4)", zIndex: 70 }}>
+                                <button
+                                  className={styles.sendBtn}
+                                  onClick={async () => {
+                                    setGameMenuOpen(false);
+                                    if (!profile?.username) { setSettingsOpen(true); setUsernameStatus("Create an ID to play"); return; }
 
-                          // Determine friend UID from selected chat
-                          const chat = chats.find(c => c.id === selected);
-                          if (!chat || !chat.members) return;
-                          const other = chat.members.find(m => m !== user.uid);
-                          if (!other) return;
+                                    // Determine friend UID from selected chat
+                                    const chat = chats.find(c => c.id === selected);
+                                    if (!chat || !chat.members) return;
+                                    const other = chat.members.find(m => m !== user.uid);
+                                    if (!other) return;
 
-                          await startNewGame(other, 'tictactoe');
-                        }}
-                        style={{ width: "100%", textAlign: "left", padding: "8px 10px" }}
-                      >
-                        🧩 Tic-Tac-Toe
-                      </button>
+                                    await startNewGame(other, 'tictactoe');
+                                  }}
+                                  style={{ width: "100%", textAlign: "left", padding: "8px 10px" }}
+                                >
+                                  🧩 Tic-Tac-Toe
+                                </button>
 
-                      <button
-                        className={styles.sendBtn}
-                        onClick={async () => {
-                          setGameMenuOpen(false);
-                          if (!profile?.username) { setSettingsOpen(true); setUsernameStatus("Create an ID to play"); return; }
+                                <button
+                                  className={styles.sendBtn}
+                                  onClick={async () => {
+                                    setGameMenuOpen(false);
+                                    if (!profile?.username) { setSettingsOpen(true); setUsernameStatus("Create an ID to play"); return; }
 
-                          // Determine friend UID from selected chat
-                          const chat = chats.find(c => c.id === selected);
-                          if (!chat || !chat.members) return;
-                          const other = chat.members.find(m => m !== user.uid);
-                          if (!other) return;
+                                    // Determine friend UID from selected chat
+                                    const chat = chats.find(c => c.id === selected);
+                                    if (!chat || !chat.members) return;
+                                    const other = chat.members.find(m => m !== user.uid);
+                                    if (!other) return;
 
-                          await startNewGame(other, 'rps');
-                        }}
-                        style={{ width: "100%", textAlign: "left", padding: "8px 10px", marginTop: 4 }}
-                      >
-                        ✂️ Rock Paper Scissors
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-
-
-            </div>
-          </header>
-
-          {settingsOpen && (
-            <div className={styles.settingsPanel} role="dialog" aria-modal="true">
-              <div className={styles.settingsInner}>
-                <h3>Settings</h3>
-                <label>
-                  Theme
-                  <select value={theme} onChange={(e) => setTheme(e.target.value as any)}>
-                    <option value="bw">Black & White</option>
-                    <option value="dark">Dark</option>
-                    <option value="light">Light</option>
-                  </select>
-                </label>
-
-                <label>
-                  Accent
-                  <div className={styles.colorSwatches} style={{ marginTop: 6 }}>
-                    {Object.entries(colorMap).map(([key, hex]) => (
-                      <button
-                        key={key}
-                        className={styles.swatch}
-                        onClick={() => setColor(hex)}
-                        style={{ background: hex, outline: color === hex ? "2px solid #fff" : "none" }}
-                      />
-                    ))}
-                  </div>
-                </label>
-
-                <label>
-                  Format
-                  <select value={format} onChange={(e) => setFormat(e.target.value as any)}>
-                    <option value="bubble">Bubble</option>
-                    <option value="compact">Compact</option>
-                    <option value="minimal">Minimal</option>
-                  </select>
-                </label>
-
-                <label>
-                  Font
-                  <select value={font} onChange={(e) => setFont(e.target.value)}>
-                    <option value="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial">System</option>
-                    <option value="var(--font-geist-sans)">Geist</option>
-                    <option value="monospace">Monospace</option>
-                    <option value="Georgia, serif">Serif</option>
-                  </select>
-                </label>
-
-                <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid rgba(255,255,255,0.03)" }}>
-                  <h4 style={{ margin: "6px 0" }}>Your ID</h4>
-                  {profile?.username ? (
-                    <div style={{ fontSize: 13, marginBottom: 8 }}>Your ID: <strong>{profile.username}</strong></div>
-                  ) : (
-                    <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-                      <input placeholder="Choose an ID (a-z0-9_- )" value={usernameInput} onChange={(e) => setUsernameInput(e.target.value)} />
-                      <button className={styles.sendBtn} onClick={() => reserveUsername(usernameInput)}>Save</button>
-                    </div>
-                  )}
-                  {usernameStatus && <div style={{ fontSize: 13, color: "var(--muted)" }}>{usernameStatus}</div>}
-
-
-                </div>
-
-                <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid rgba(255,255,255,0.03)" }}>
-                  <h4 style={{ margin: "6px 0" }}>Profile</h4>
-                  <label style={{ fontSize: 13, color: "var(--muted)" }}>
-                    Display Name
-                    <input
-                      value={profileEdit.name}
-                      onChange={(e) => setProfileEdit(p => ({ ...p, name: e.target.value }))}
-                      placeholder="Your Name"
-                      style={{ marginTop: 4, width: '100%' }}
-                    />
-                  </label>
-                  <label style={{ fontSize: 13, color: "var(--muted)", marginTop: 8 }}>
-                    Bio
-                    <textarea
-                      value={profileEdit.bio}
-                      onChange={(e) => setProfileEdit(p => ({ ...p, bio: e.target.value }))}
-                      placeholder="Tell us about yourself..."
-                      style={{ marginTop: 4, width: '100%', minHeight: 60, resize: 'vertical' }}
-                    />
-                  </label>
-                  <button className={styles.sendBtn} onClick={saveProfile} style={{ marginTop: 8, width: '100%' }}>Save Profile</button>
-                </div>
-
-                <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-                  {user ? (
-                    <>
-                      <div style={{ alignSelf: "center", fontSize: 13 }}>{user.name}</div>
-                      <button onClick={() => signOutUser()} className={styles.sendBtn}>Sign out</button>
-                    </>
-                  ) : (
-                    <button onClick={() => signIn()} className={styles.sendBtn}>Sign in with Google</button>
-                  )}
-
-                  <button onClick={() => setSettingsOpen(false)} className={styles.sendBtn} disabled={!profile?.username} title={!profile?.username ? "Set an ID to close settings" : undefined}>Close</button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {addFriendOpen && (
-            <div className={styles.settingsPanel} role="dialog" aria-modal="true" style={{ left: 280 }}>
-              <div className={styles.settingsInner}>
-                <h3>Add Friend</h3>
-                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                  <input placeholder="friend-id" value={friendId} onChange={(e) => setFriendId(e.target.value)} />
-                  <button className={styles.sendBtn} onClick={async () => { const ok = await addFriendById(friendId); if (ok) { setAddFriendOpen(false); setFriendId(""); } }}>Send Request</button>
-                </div>
-                {friendStatus && <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 6 }}>{friendStatus}</div>}
-                <div style={{ marginTop: 8, display: "flex", gap: 8 }}>
-                  <button className={styles.sendBtn} onClick={() => setAddFriendOpen(false)}>Close</button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {gameOpen && game && (
-            <ActiveGame
-              game={game}
-              user={user}
-              opponent={
-                (game.players || (game.marks && Object.keys(game.marks)))
-                  ?.filter((uid: string) => uid !== user?.uid)
-                  .map((uid: string) => friendsList.find(f => f.uid === uid) || { uid })
-                [0]
-              }
-              onMove={makeMove}
-              onClose={() => setGameOpen(false)}
-              onRestart={() => selected && startNewGame(
-                (game.players || Object.keys(game.marks)).find((id: string) => id !== user?.uid)!,
-                game.type
-              )}
-              onAccept={acceptGame}
-              onDecline={declineGame}
-            />
-          )}
-
-          <GameCenter
-            isOpen={gameCenterOpen}
-            onClose={() => setGameCenterOpen(false)}
-            user={user}
-            friendsList={friendsList}
-            chats={chats}
-            onOpenChat={(id) => { setSelected(id); setGameOpen(true); }}
-            onStartGame={startNewGame}
-          />
-
-          {notificationsOpen && (
-            <div className={styles.notificationPanel} role="dialog" aria-modal="true">
-              <div className={styles.notificationInner}>
-                <h3>Notifications</h3>
-
-                {pendingRequests.length > 0 && (
-                  <div style={{ marginBottom: 12 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Friend Requests</div>
-                    <ul style={{ padding: 0, listStyle: "none", margin: 0 }}>
-                      {pendingRequests.map((r) => (
-                        <li key={r.id} className={styles.notificationItem} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                          <div>
-                            <div style={{ fontWeight: 600 }}>{r.fromUsername || r.fromUid}</div>
-                            <div style={{ fontSize: 13, color: "var(--muted)" }}>Wants to be your friend</div>
+                                    await startNewGame(other, 'rps');
+                                  }}
+                                  style={{ width: "100%", textAlign: "left", padding: "8px 10px", marginTop: 4 }}
+                                >
+                                  ✂️ Rock Paper Scissors
+                                </button>
+                              </div>
+                            )}
                           </div>
-                          <div style={{ display: "flex", gap: 8 }}>
-                            <button className={styles.sendBtn} onClick={() => acceptRequest(r)}>Accept</button>
-                            <button className={styles.sendBtn} onClick={() => declineRequest(r)}>Decline</button>
+                        )}
+
+
+                      </div>
+                    </header >
+
+                      { settingsOpen && (
+                        <div className={styles.settingsPanel} role="dialog" aria-modal="true">
+                          <div className={styles.settingsInner}>
+                            <h3>Settings</h3>
+                            <label>
+                              Theme
+                              <select value={theme} onChange={(e) => setTheme(e.target.value as any)}>
+                                <option value="bw">Black & White</option>
+                                <option value="dark">Dark</option>
+                                <option value="light">Light</option>
+                              </select>
+                            </label>
+
+                            <label>
+                              Accent
+                              <div className={styles.colorSwatches} style={{ marginTop: 6 }}>
+                                {Object.entries(colorMap).map(([key, hex]) => (
+                                  <button
+                                    key={key}
+                                    className={styles.swatch}
+                                    onClick={() => setColor(hex)}
+                                    style={{ background: hex, outline: color === hex ? "2px solid #fff" : "none" }}
+                                  />
+                                ))}
+                              </div>
+                            </label>
+
+                            <label>
+                              Format
+                              <select value={format} onChange={(e) => setFormat(e.target.value as any)}>
+                                <option value="bubble">Bubble</option>
+                                <option value="compact">Compact</option>
+                                <option value="minimal">Minimal</option>
+                              </select>
+                            </label>
+
+                            <label>
+                              Font
+                              <select value={font} onChange={(e) => setFont(e.target.value)}>
+                                <option value="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial">System</option>
+                                <option value="var(--font-geist-sans)">Geist</option>
+                                <option value="monospace">Monospace</option>
+                                <option value="Georgia, serif">Serif</option>
+                              </select>
+                            </label>
+
+                            <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid rgba(255,255,255,0.03)" }}>
+                              <h4 style={{ margin: "6px 0" }}>Your ID</h4>
+                              {profile?.username ? (
+                                <div style={{ fontSize: 13, marginBottom: 8 }}>Your ID: <strong>{profile.username}</strong></div>
+                              ) : (
+                                <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+                                  <input placeholder="Choose an ID (a-z0-9_- )" value={usernameInput} onChange={(e) => setUsernameInput(e.target.value)} />
+                                  <button className={styles.sendBtn} onClick={() => reserveUsername(usernameInput)}>Save</button>
+                                </div>
+                              )}
+                              {usernameStatus && <div style={{ fontSize: 13, color: "var(--muted)" }}>{usernameStatus}</div>}
+
+
+                            </div>
+
+                            <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid rgba(255,255,255,0.03)" }}>
+                              <h4 style={{ margin: "6px 0" }}>Profile</h4>
+                              <label style={{ fontSize: 13, color: "var(--muted)" }}>
+                                Display Name
+                                <input
+                                  value={profileEdit.name}
+                                  onChange={(e) => setProfileEdit(p => ({ ...p, name: e.target.value }))}
+                                  placeholder="Your Name"
+                                  style={{ marginTop: 4, width: '100%' }}
+                                />
+                              </label>
+                              <label style={{ fontSize: 13, color: "var(--muted)", marginTop: 8 }}>
+                                Bio
+                                <textarea
+                                  value={profileEdit.bio}
+                                  onChange={(e) => setProfileEdit(p => ({ ...p, bio: e.target.value }))}
+                                  placeholder="Tell us about yourself..."
+                                  style={{ marginTop: 4, width: '100%', minHeight: 60, resize: 'vertical' }}
+                                />
+                              </label>
+                              <button className={styles.sendBtn} onClick={saveProfile} style={{ marginTop: 8, width: '100%' }}>Save Profile</button>
+                            </div>
+
+                            <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                              {user ? (
+                                <>
+                                  <div style={{ alignSelf: "center", fontSize: 13 }}>{user.name}</div>
+                                  <button onClick={() => signOutUser()} className={styles.sendBtn}>Sign out</button>
+                                </>
+                              ) : (
+                                <button onClick={() => signIn()} className={styles.sendBtn}>Sign in with Google</button>
+                              )}
+
+                              <button onClick={() => setSettingsOpen(false)} className={styles.sendBtn} disabled={!profile?.username} title={!profile?.username ? "Set an ID to close settings" : undefined}>Close</button>
+                            </div>
                           </div>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
+                        </div>
+                      )
+                }
 
-                {unreadChats.length === 0 ? (
-                  <div>No new messages</div>
-                ) : (
-                  <>
-                    <ul style={{ padding: 0, listStyle: "none", margin: 0 }}>
-                      {unreadChats.map((c) => (
-                        <li key={c.id} className={styles.notificationItem} onClick={() => { setSelected(c.id); markRead(c.id); setNotificationsOpen(false); }}>
-                          <div style={{ fontWeight: 600 }}>{c.name || "Unnamed"}</div>
-                          <div style={{ fontSize: 13, color: "var(--muted)" }}>{(c as any).last || "New message"}</div>
-                        </li>
-                      ))}
-                    </ul>
-                    <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-                      <button className={styles.sendBtn} onClick={() => { markAllRead(); setNotificationsOpen(false); }}>Mark all read</button>
+                {
+                  addFriendOpen && (
+                    <div className={styles.settingsPanel} role="dialog" aria-modal="true" style={{ left: 280 }}>
+                      <div className={styles.settingsInner}>
+                        <h3>Add Friend</h3>
+                        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                          <input placeholder="friend-id" value={friendId} onChange={(e) => setFriendId(e.target.value)} />
+                          <button className={styles.sendBtn} onClick={async () => { const ok = await addFriendById(friendId); if (ok) { setAddFriendOpen(false); setFriendId(""); } }}>Send Request</button>
+                        </div>
+                        {friendStatus && <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 6 }}>{friendStatus}</div>}
+                        <div style={{ marginTop: 8, display: "flex", gap: 8 }}>
+                          <button className={styles.sendBtn} onClick={() => setAddFriendOpen(false)}>Close</button>
+                        </div>
+                      </div>
                     </div>
-                  </>
-                )}
+                  )
+                }
 
-              </div>
-            </div>
-          )}
+                {
+                  gameOpen && game && (
+                    <ActiveGame
+                      game={game}
+                      user={user}
+                      opponent={
+                        (game.players || (game.marks && Object.keys(game.marks)))
+                          ?.filter((uid: string) => uid !== user?.uid)
+                          .map((uid: string) => friendsList.find(f => f.uid === uid) || { uid })
+                        [0]
+                      }
+                      onMove={makeMove}
+                      onClose={() => setGameOpen(false)}
+                      onRestart={() => selected && startNewGame(
+                        (game.players || Object.keys(game.marks)).find((id: string) => id !== user?.uid)!,
+                        game.type
+                      )}
+                      onAccept={acceptGame}
+                      onDecline={declineGame}
+                    />
+                  )
+                }
+
+                <GameCenter
+                  isOpen={gameCenterOpen}
+                  onClose={() => setGameCenterOpen(false)}
+                  user={user}
+                  friendsList={friendsList}
+                  chats={chats}
+                  onOpenChat={(id) => { setSelected(id); setGameOpen(true); }}
+                  onStartGame={startNewGame}
+                />
+
+                {
+                  viewProfileId && (
+                    <div className={styles.settingsPanel} role="dialog" aria-modal="true" onClick={(e) => { if (e.target === e.currentTarget) setViewProfileId(null); }}>
+                      <div className={styles.settingsInner} style={{ maxWidth: 320, padding: 24, textAlign: 'center' }}>
+                        {(() => {
+                          const f = friendsList.find(p => p.uid === viewProfileId);
+                          const uid = viewProfileId;
+                          const name = f?.name || f?.username || uid;
+
+                          return (
+                            <div>
+                              <div style={{ width: 80, height: 80, borderRadius: 40, background: '#333', margin: '0 auto 16px', overflow: 'hidden' }}>
+                                {f?.photo ? <img src={f.photo} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : null}
+                              </div>
+                              <h2 style={{ fontSize: 20, marginBottom: 4 }}>{name}</h2>
+                              {f?.username && <div style={{ color: 'var(--muted)', fontSize: 14, marginBottom: 12 }}>@{f.username}</div>}
+
+                              {f?.bio ? (
+                                <div style={{ background: 'rgba(255,255,255,0.05)', padding: 12, borderRadius: 8, fontSize: 14, lineHeight: 1.4, marginBottom: 20, textAlign: 'left' }}>
+                                  {f.bio}
+                                </div>
+                              ) : (
+                                <div style={{ color: 'var(--muted)', fontStyle: 'italic', marginBottom: 20 }}>No bio yet.</div>
+                              )}
+
+                              <button className={styles.sendBtn} onClick={() => setViewProfileId(null)} style={{ width: '100%' }}>Close</button>
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    </div>
+                  )
+                }
+
+                {
+                  notificationsOpen && (
+                    <div className={styles.notificationPanel} role="dialog" aria-modal="true">
+                      <div className={styles.notificationInner}>
+                        <h3>Notifications</h3>
+
+                        {pendingRequests.length > 0 && (
+                          <div style={{ marginBottom: 12 }}>
+                            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Friend Requests</div>
+                            <ul style={{ padding: 0, listStyle: "none", margin: 0 }}>
+                              {pendingRequests.map((r) => (
+                                <li key={r.id} className={styles.notificationItem} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                  <div>
+                                    <div style={{ fontWeight: 600 }}>{r.fromUsername || r.fromUid}</div>
+                                    <div style={{ fontSize: 13, color: "var(--muted)" }}>Wants to be your friend</div>
+                                  </div>
+                                  <div style={{ display: "flex", gap: 8 }}>
+                                    <button className={styles.sendBtn} onClick={() => acceptRequest(r)}>Accept</button>
+                                    <button className={styles.sendBtn} onClick={() => declineRequest(r)}>Decline</button>
+                                  </div>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {unreadChats.length === 0 ? (
+                          <div>No new messages</div>
+                        ) : (
+                          <>
+                            <ul style={{ padding: 0, listStyle: "none", margin: 0 }}>
+                              {unreadChats.map((c) => (
+                                <li key={c.id} className={styles.notificationItem} onClick={() => { setSelected(c.id); markRead(c.id); setNotificationsOpen(false); }}>
+                                  <div style={{ fontWeight: 600 }}>{c.name || "Unnamed"}</div>
+                                  <div style={{ fontSize: 13, color: "var(--muted)" }}>{(c as any).last || "New message"}</div>
+                                </li>
+                              ))}
+                            </ul>
+                            <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                              <button className={styles.sendBtn} onClick={() => { markAllRead(); setNotificationsOpen(false); }}>Mark all read</button>
+                            </div>
+                          </>
+                        )}
+
+                      </div>
+                    </div>
+                  )
+                }
           <div className={styles.messages}>
             {messages.map((m) => {
               const isMe = !!(m.uid && user && m.uid === user.uid);
