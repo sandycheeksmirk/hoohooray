@@ -14,6 +14,8 @@ import {
   setDoc,
   updateDoc,
 } from "firebase/firestore";
+import { auth, googleProvider } from "../lib/firebase";
+import { onAuthStateChanged, signInWithPopup, signOut } from "firebase/auth";
 
 type Chat = {
   id: string;
@@ -108,7 +110,85 @@ export default function ChatClient() {
     } catch (e) {}
   }, [font]);
 
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [lastChecked, setLastChecked] = useState<Record<string, number>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("lastChecked") || "{}") as Record<string, number>;
+    } catch (e) {
+      return {};
+    }
+  });
+
   useEffect(() => {
+    try {
+      localStorage.setItem("lastChecked", JSON.stringify(lastChecked));
+    } catch (e) {}
+  }, [lastChecked]);
+
+  function getTimeField(t: any) {
+    if (!t) return 0;
+    if (typeof t.toMillis === "function") return t.toMillis();
+    if (t.seconds) return t.seconds * 1000;
+    if (typeof t === "number") return t;
+    return 0;
+  }
+
+  const unreadChats = chats.filter((c) => {
+    const updated = getTimeField((c as any).updatedAt);
+    return updated > (lastChecked[c.id] || 0);
+  });
+
+  function markRead(chatId: string) {
+    setLastChecked((prev) => {
+      const next = { ...prev, [chatId]: Date.now() };
+      try {
+        localStorage.setItem("lastChecked", JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
+  }
+
+  function markAllRead() {
+    const now = Date.now();
+    const next = { ...lastChecked };
+    unreadChats.forEach((c) => (next[c.id] = now));
+    setLastChecked(next);
+  }
+
+  const [user, setUser] = useState<{ uid: string; name?: string; photo?: string } | null>(null);
+
+  useEffect(() => {
+    if (!auth) return;
+    const unsub = onAuthStateChanged(auth, (u) => {
+      if (u) setUser({ uid: u.uid, name: u.displayName || undefined, photo: u.photoURL || undefined });
+      else setUser(null);
+    });
+    return () => unsub();
+  }, []);
+
+  async function signIn() {
+    if (!auth) return alert("Auth not initialized");
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (e) {
+      console.error("Sign-in failed", e);
+    }
+  }
+
+  async function signOutUser() {
+    if (!auth) return;
+    try {
+      await signOut(auth);
+    } catch (e) {
+      console.error("Sign-out failed", e);
+    }
+  }
+
+  useEffect(() => {
+    if (!user) {
+      setChats([]);
+      return;
+    }
     const q = query(collection(db, "chats"), orderBy("updatedAt", "desc"));
     const unsub = onSnapshot(q, (snap) => {
       setChats(snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })));
@@ -120,7 +200,7 @@ export default function ChatClient() {
   }, []);
 
   useEffect(() => {
-    if (!selected) return;
+    if (!user || !selected) return;
     const q = query(
       collection(db, `chats/${selected}/messages`),
       orderBy("createdAt", "asc")
@@ -150,19 +230,30 @@ export default function ChatClient() {
     const messagesCol = collection(db, `chats/${selected}/messages`);
     await addDoc(messagesCol, {
       text: input,
-      me: true,
+      uid: user?.uid || null,
+      name: user?.name || "Anonymous",
       createdAt: serverTimestamp(),
     });
 
     // update chat meta
     const chatRef = doc(db, "chats", selected as string);
-    await updateDoc(chatRef, { last: input, updatedAt: serverTimestamp() });
+    await updateDoc(chatRef, { last: input, lastBy: user?.name || null, updatedAt: serverTimestamp() });
 
     setInput("");
   }
 
   return (
     <main className={styles.root} style={{ padding: 12 }}>
+      {!user ? (
+        <div style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", minHeight: "60vh" }}>
+          <div style={{ textAlign: "center" }}>
+            <h2 style={{ marginBottom: 12 }}>Sign in to continue</h2>
+            <button className={styles.sendBtn} onClick={() => signIn()} style={{ padding: "10px 18px" }}>
+              Sign in with Google
+            </button>
+          </div>
+        </div>
+      ) : null}
       <div className={styles.container}>
         <aside className={styles.sidebar}>
           <div className={styles.logo}>Telegram — BW (Live)</div>
@@ -201,30 +292,28 @@ export default function ChatClient() {
               <div className={styles.headerStatus}>online</div>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <div className={styles.colorSwatches}>
-                {Object.entries(colorMap).map(([key, hex]) => (
-                  <button
-                    key={key}
-                    aria-label={`Accent ${key}`}
-                    title={key}
-                    className={styles.swatch}
-                    onClick={() => setColor(hex)}
-                    style={{ background: hex, outline: color === hex ? "2px solid #fff" : "none" }}
-                  />
-                ))}
-              </div>
+              <button
+                aria-label="Notifications"
+                title="Notifications"
+                onClick={() => setNotificationsOpen((s) => !s)}
+                className={styles.notifBtn}
+                style={{ position: "relative" }}
+              >
+                🔔
+                {unreadChats.length > 0 && (
+                  <span className={styles.badge}>{unreadChats.length}</span>
+                )}
+              </button>
 
-                <div style={{ display: "flex", gap: 8 }}>
-                  <button
-                    aria-label="Open settings"
-                    title="Settings"
-                    onClick={() => setSettingsOpen(true)}
-                    className={styles.sendBtn}
-                    style={{ padding: 8, minWidth: 90 }}
-                  >
-                    Settings
-                  </button>
-                </div>
+              <button
+                aria-label="Open settings"
+                title="Settings"
+                onClick={() => setSettingsOpen(true)}
+                className={styles.sendBtn}
+                style={{ padding: 8, minWidth: 90 }}
+              >
+                Settings
+              </button>
             </div>
           </header>
 
@@ -243,7 +332,7 @@ export default function ChatClient() {
 
                 <label>
                   Accent
-                  <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+                  <div className={styles.colorSwatches} style={{ marginTop: 6 }}>
                     {Object.entries(colorMap).map(([key, hex]) => (
                       <button
                         key={key}
@@ -275,21 +364,57 @@ export default function ChatClient() {
                 </label>
 
                 <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                  {user ? (
+                    <>
+                      <div style={{ alignSelf: "center", fontSize: 13 }}>{user.name}</div>
+                      <button onClick={() => signOutUser()} className={styles.sendBtn}>Sign out</button>
+                    </>
+                  ) : (
+                    <button onClick={() => signIn()} className={styles.sendBtn}>Sign in with Google</button>
+                  )}
+
                   <button onClick={() => setSettingsOpen(false)} className={styles.sendBtn}>Close</button>
                 </div>
               </div>
             </div>
           )}
-          <div className={styles.messages}>
-            {messages.map((m) => (
-              <div
-                key={m.id}
-                className={`${styles.msg} ${m.me ? styles.msgMe : styles.msgOther}`}
-              >
-                <div className={styles.msgText}>{m.text}</div>
-                <div className={styles.msgTime}>—</div>
+          {notificationsOpen && (
+            <div className={styles.notificationPanel} role="dialog" aria-modal="true">
+              <div className={styles.notificationInner}>
+                <h3>Notifications</h3>
+                {unreadChats.length === 0 ? (
+                  <div>No new messages</div>
+                ) : (
+                  <>
+                    <ul style={{ padding: 0, listStyle: "none", margin: 0 }}>
+                      {unreadChats.map((c) => (
+                        <li key={c.id} className={styles.notificationItem} onClick={() => { setSelected(c.id); markRead(c.id); setNotificationsOpen(false); }}>
+                          <div style={{ fontWeight: 600 }}>{c.name || "Unnamed"}</div>
+                          <div style={{ fontSize: 13, color: "var(--muted)" }}>{(c as any).last || "New message"}</div>
+                        </li>
+                      ))}
+                    </ul>
+                    <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                      <button className={styles.sendBtn} onClick={() => { markAllRead(); setNotificationsOpen(false); }}>Mark all read</button>
+                    </div>
+                  </>
+                )}
               </div>
-            ))}
+            </div>
+          )}
+          <div className={styles.messages}>
+            {messages.map((m) => {
+              const isMe = !!(m.uid && user && m.uid === user.uid);
+              return (
+                <div
+                  key={m.id}
+                  className={`${styles.msg} ${isMe ? styles.msgMe : styles.msgOther}`}
+                >
+                  <div className={styles.msgText}>{m.text}</div>
+                  <div className={styles.msgTime}>{m.name ? m.name : ""}</div>
+                </div>
+              );
+            })}
           </div>
 
           <form className={styles.inputBar} onSubmit={sendMessage}>
