@@ -290,7 +290,8 @@ export default function ChatClient() {
         board: Array(9).fill(null),
         turn: sorted[0], // First alphabetically goes first
         marks,
-        status: "ongoing",
+        status: "pending",
+        requestedBy: user.uid,
         startedAt: serverTimestamp()
       };
     } else if (gameType === 'rps') {
@@ -298,17 +299,79 @@ export default function ChatClient() {
         type: 'rps',
         players: ids,
         moves: {},
-        status: 'ongoing',
+        status: 'pending',
+        requestedBy: user.uid,
         startedAt: serverTimestamp()
       };
     }
 
     try {
       await updateDoc(chatRef, { game: gameData, updatedAt: serverTimestamp() } as any);
+
+      // Send system message
+      const messagesCol = collection(db, `chats/${chatId}/messages`);
+      await addDoc(messagesCol, {
+        text: "🎮 sent a game request",
+        uid: user.uid,
+        name: user.name || "Anonymous",
+        isSystem: true,
+        createdAt: serverTimestamp(),
+      });
+      await updateDoc(chatRef, { last: "🎮 Game Request", lastBy: user.name || null, updatedAt: serverTimestamp() });
+
       setGameOpen(true);
     } catch (e) {
       console.error("Error starting game", e);
       setFriendStatus("Could not start game");
+    }
+  }
+
+  async function acceptGame() {
+    if (!user || !selected) return;
+    const chatRef = doc(db, "chats", selected);
+    try {
+      // We can just update status to ongoing. 
+      // For TicTacToe, state is pre-initialized. For RPS, state is pre-initialized.
+      await updateDoc(chatRef, {
+        "game.status": "ongoing",
+        "game.startedAt": serverTimestamp(),
+        updatedAt: serverTimestamp()
+      } as any);
+
+      // Send system message
+      const messagesCol = collection(db, `chats/${selected}/messages`);
+      await addDoc(messagesCol, {
+        text: "✅ accepted game request",
+        uid: user.uid,
+        name: user.name || "Anonymous",
+        isSystem: true,
+        createdAt: serverTimestamp(),
+      });
+    } catch (e) {
+      console.error("Error accepting game", e);
+    }
+  }
+
+  async function declineGame() {
+    if (!user || !selected) return;
+    const chatRef = doc(db, "chats", selected);
+    try {
+      // Either set status to 'declined' (so they see it) or just nullify it.
+      // Let's set to declined then nullify after a timeout or just declined.
+      // Simplest: set game to null.
+      await updateDoc(chatRef, { game: null, updatedAt: serverTimestamp() } as any);
+      setGameOpen(false);
+
+      const messagesCol = collection(db, `chats/${selected}/messages`);
+      await addDoc(messagesCol, {
+        text: "🚫 declined game request",
+        uid: user.uid,
+        name: user.name || "Anonymous",
+        isSystem: true,
+        createdAt: serverTimestamp(),
+      });
+    } catch (e) {
+      console.error("Error declining game", e);
     }
   }
 
@@ -412,28 +475,7 @@ export default function ChatClient() {
     return null;
   }
 
-  async function startGame() {
-    if (!user || !selected) return;
-    const chatRef = doc(db, "chats", selected);
-    try {
-      const snap = await getDoc(chatRef);
-      if (!snap.exists()) return setFriendStatus("Chat missing");
-      const members = (snap.data() as any).members as string[] | undefined;
-      if (!members || members.length !== 2) return setFriendStatus("Games only available in 1:1 chats");
-      const sorted = [...members].sort();
-      const marks: Record<string, string> = {} as any;
-      marks[sorted[0]] = "X";
-      marks[sorted[1]] = "O";
-      await updateDoc(chatRef, {
-        game: { board: Array(9).fill(null), turn: sorted[0], marks, status: "ongoing", startedAt: serverTimestamp() },
-        updatedAt: serverTimestamp()
-      } as any);
-      setGameOpen(true);
-    } catch (e) {
-      console.error(e);
-      setFriendStatus("Could not start game");
-    }
-  }
+
 
   async function makeMove(move: any) {
     if (!user || !selected) return;
@@ -895,13 +937,37 @@ export default function ChatClient() {
                         onClick={async () => {
                           setGameMenuOpen(false);
                           if (!profile?.username) { setSettingsOpen(true); setUsernameStatus("Create an ID to play"); return; }
-                          // open/start tic-tac-toe
-                          await startGame();
-                          setGameOpen(true);
+
+                          // Determine friend UID from selected chat
+                          const chat = chats.find(c => c.id === selected);
+                          if (!chat || !chat.members) return;
+                          const other = chat.members.find(m => m !== user.uid);
+                          if (!other) return;
+
+                          await startNewGame(other, 'tictactoe');
                         }}
                         style={{ width: "100%", textAlign: "left", padding: "8px 10px" }}
                       >
                         🧩 Tic-Tac-Toe
+                      </button>
+
+                      <button
+                        className={styles.sendBtn}
+                        onClick={async () => {
+                          setGameMenuOpen(false);
+                          if (!profile?.username) { setSettingsOpen(true); setUsernameStatus("Create an ID to play"); return; }
+
+                          // Determine friend UID from selected chat
+                          const chat = chats.find(c => c.id === selected);
+                          if (!chat || !chat.members) return;
+                          const other = chat.members.find(m => m !== user.uid);
+                          if (!other) return;
+
+                          await startNewGame(other, 'rps');
+                        }}
+                        style={{ width: "100%", textAlign: "left", padding: "8px 10px", marginTop: 4 }}
+                      >
+                        ✂️ Rock Paper Scissors
                       </button>
                     </div>
                   )}
@@ -1021,6 +1087,8 @@ export default function ChatClient() {
                 (game.players || Object.keys(game.marks)).find((id: string) => id !== user?.uid)!,
                 game.type
               )}
+              onAccept={acceptGame}
+              onDecline={declineGame}
             />
           )}
 

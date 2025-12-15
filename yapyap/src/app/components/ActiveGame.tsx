@@ -8,9 +8,11 @@ interface ActiveGameProps {
     onMove: (move: any) => void;
     onClose: () => void;
     onRestart: () => void;
+    onAccept?: () => void;
+    onDecline?: () => void;
 }
 
-export default function ActiveGame({ game, user, opponent, onMove, onClose, onRestart }: ActiveGameProps) {
+export default function ActiveGame({ game, user, opponent, onMove, onClose, onRestart, onAccept, onDecline }: ActiveGameProps) {
     if (!game) return null;
 
     const isTicTacToe = game.type === 'tictactoe' || !game.type; // Default to tictactoe for backward compat
@@ -28,11 +30,29 @@ export default function ActiveGame({ game, user, opponent, onMove, onClose, onRe
                     Vs: {opponent?.username || opponent?.name || 'Friend'}
                 </div>
 
-                {isTicTacToe && (
+                {game.status === 'pending' && (
+                    <div style={{ textAlign: 'center', padding: '20px 0' }}>
+                        {game.requestedBy === user.uid ? (
+                            <div style={{ color: 'var(--muted)' }}>
+                                Waiting for {opponent?.username || 'opponent'} to accept...
+                            </div>
+                        ) : (
+                            <div>
+                                <div style={{ marginBottom: 12 }}>{opponent?.username || 'Friend'} wants to play!</div>
+                                <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+                                    <button className={styles.sendBtn} onClick={onAccept} style={{ background: 'var(--accent)' }}>Accept</button>
+                                    <button className={styles.sendBtn} onClick={onDecline} style={{ background: '#333' }}>Decline</button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {game.status !== 'pending' && isTicTacToe && (
                     <TicTacToeBoard game={game} user={user} onMove={onMove} />
                 )}
 
-                {isRPS && (
+                {game.status !== 'pending' && isRPS && (
                     <RPSBoard game={game} user={user} onMove={onMove} />
                 )}
 
@@ -43,7 +63,7 @@ export default function ActiveGame({ game, user, opponent, onMove, onClose, onRe
                 </div>
 
                 <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
-                    <button className={styles.sendBtn} onClick={onRestart}>Restart Game</button>
+                    {game.status === 'finished' && <button className={styles.sendBtn} onClick={onRestart}>Play Again</button>}
                     <button className={styles.sendBtn} onClick={onClose}>Close</button>
                 </div>
             </div>
@@ -52,6 +72,10 @@ export default function ActiveGame({ game, user, opponent, onMove, onClose, onRe
 }
 
 function getStatusText(game: any, user: any, opponent: any) {
+    if (game.status === 'pending') {
+        if (game.requestedBy === user.uid) return 'Request Sent';
+        return 'Game Request';
+    }
     if (game.status === 'finished') {
         if (game.winner === user.uid) return 'You Won! 🎉';
         if (game.winner === 'draw' || !game.winner) return 'It\'s a Draw! 🤝';
