@@ -243,9 +243,28 @@ export default function ChatClient() {
   const [gameMenuOpen, setGameMenuOpen] = useState(false);
   const gameMenuRef = useRef<HTMLDivElement | null>(null);
   const [viewProfileId, setViewProfileId] = useState<string | null>(null);
+  const [viewProfileData, setViewProfileData] = useState<any>(null);
   const [friendsList, setFriendsList] = useState<Array<{ uid: string; username?: string; name?: string; bio?: string; photo?: string }>>([]);
   const [profileEdit, setProfileEdit] = useState({ name: "", bio: "" });
-  const [viewProfileId, setViewProfileId] = useState<string | null>(null);
+
+  // Fetch full profile when viewing someone
+  useEffect(() => {
+    if (!viewProfileId) {
+      setViewProfileData(null);
+      return;
+    }
+    // Optimistic load from friends list
+    const cached = friendsList.find(f => f.uid === viewProfileId);
+    if (cached) setViewProfileData(cached);
+
+    const unsub = onSnapshot(doc(db, "users", viewProfileId), (docSnap) => {
+      if (docSnap.exists()) {
+        setViewProfileData({ uid: docSnap.id, ...docSnap.data() });
+      }
+    });
+    return () => unsub();
+  }, [viewProfileId, friendsList]);
+
 
   useEffect(() => {
     if (settingsOpen && profile) {
@@ -1006,8 +1025,11 @@ export default function ChatClient() {
                             <div className={styles.headerAvatar} />
                           )}
                         </div>
+                        <div className={styles.headerMeta} style={{ cursor: 'pointer' }} onClick={() => setViewProfileId(other)}>
+                          <div className={styles.headerName}>{label}</div>
+                          <div className={styles.headerStatus}>online</div>
+                        </div>
                       </>
-                      );
                       );
                 }
                 // If a chat isn't present locally, try to infer the label from the selected DM id
@@ -1290,7 +1312,7 @@ export default function ChatClient() {
                     <div className={styles.settingsPanel} role="dialog" aria-modal="true" onClick={(e) => { if (e.target === e.currentTarget) setViewProfileId(null); }}>
                       <div className={styles.settingsInner} style={{ maxWidth: 320, padding: 24, textAlign: 'center' }}>
                         {(() => {
-                          const f = friendsList.find(p => p.uid === viewProfileId);
+                          const f = viewProfileData || friendsList.find(p => p.uid === viewProfileId);
                           const uid = viewProfileId;
                           const name = f?.name || f?.username || uid;
 
