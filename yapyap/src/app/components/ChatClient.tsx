@@ -605,11 +605,26 @@ export default function ChatClient() {
                     </>
                   );
                 }
+                // If a chat isn't present locally, try to infer the label from the selected DM id
+                const fallbackLabel = (() => {
+                  const found = chats.find((c) => c.id === selected);
+                  if (found) return found.name;
+                  if (selected && selected.startsWith("dm_") && user) {
+                    const parts = selected.split("_");
+                    if (parts.length === 3) {
+                      const other = parts[1] === user.uid ? parts[2] : parts[1];
+                      const friend = friendsList.find((f) => f.uid === other);
+                      return friend ? (friend.username || friend.name || other) : other;
+                    }
+                  }
+                  return "No chat selected";
+                })();
+
                 return (
                   <>
                     <div className={styles.headerAvatar} />
                     <div className={styles.headerMeta}>
-                      <div className={styles.headerName}>{chats.find((c) => c.id === selected)?.name || "No chat selected"}</div>
+                      <div className={styles.headerName}>{fallbackLabel}</div>
                       <div className={styles.headerStatus}>online</div>
                     </div>
                   </>
