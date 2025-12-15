@@ -1349,6 +1349,7 @@ export default function ChatClient() {
                                 )}
                                 {game.status === 'finished' && (
                                   <button className={styles.sendBtn} onClick={() => startNewGame(other, 'coinflip')} style={{ width: '100%' }}>Flip Again</button>
+                                )}
                               </div>
                             );
                           }
