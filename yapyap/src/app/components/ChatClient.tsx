@@ -1145,7 +1145,7 @@ export default function ChatClient() {
               </button>
 
               {/* Call Buttons for 1:1 Chats */}
-              {chats.find((c) => c.id === selected && c.members && c.members.length === 2) && (
+              {selected && selected.startsWith("dm_") && (
                 <>
                   <button
                     title="Voice Call"
