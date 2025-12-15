@@ -16,6 +16,45 @@ export default function CallOverlay({ call, user, onAccept, onDecline, onEnd, lo
     const localVideoRef = useRef<HTMLVideoElement>(null);
     const remoteVideoRef = useRef<HTMLVideoElement>(null);
 
+    // Ringing & Notification
+    useEffect(() => {
+        const isCaller = call.caller === user.uid; // Define isCaller here for this effect's dependency
+        if (call.status === 'ringing' && !isCaller) {
+            // Browser Notification
+            if ("Notification" in window) {
+                if (Notification.permission === "granted") {
+                    new Notification("Incoming Call", { body: `${call.callerName || 'Someone'} is calling you...`, icon: '/icon.png' });
+                } else if (Notification.permission !== "denied") {
+                    Notification.requestPermission();
+                }
+            }
+
+            // Sound Loop
+            const playBeep = () => {
+                try {
+                    const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+                    if (!AudioContext) return;
+                    const ctx = new AudioContext();
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(800, ctx.currentTime); // Higher pitch ring
+                    osc.frequency.exponentialRampToValueAtTime(600, ctx.currentTime + 0.5);
+                    gain.gain.setValueAtTime(0.1, ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
+                    osc.start();
+                    osc.stop(ctx.currentTime + 0.5);
+                } catch (e) { console.error(e); }
+            };
+
+            playBeep();
+            const interval = setInterval(playBeep, 1500);
+            return () => clearInterval(interval);
+        }
+    }, [call.status, call.caller, user.uid, call.callerName]); // Added user.uid and call.caller to dependencies for isCaller
+
     useEffect(() => {
         let interval: any;
         if (call.status === 'connected') {
