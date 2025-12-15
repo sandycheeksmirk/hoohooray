@@ -92,6 +92,22 @@ export default function ChatClient() {
     } catch (e) {}
   }, [format]);
 
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [font, setFont] = useState<string>(() => {
+    try {
+      return localStorage.getItem("font") || "system-ui, -apple-system, \"Segoe UI\", Roboto, \"Helvetica Neue\", Arial";
+    } catch (e) {
+      return "system-ui, -apple-system, \"Segoe UI\", Roboto, \"Helvetica Neue\", Arial";
+    }
+  });
+
+  useEffect(() => {
+    try {
+      document.documentElement.style.setProperty("--app-font", font);
+      localStorage.setItem("font", font);
+    } catch (e) {}
+  }, [font]);
+
   useEffect(() => {
     const q = query(collection(db, "chats"), orderBy("updatedAt", "desc"));
     const unsub = onSnapshot(q, (snap) => {
@@ -198,32 +214,72 @@ export default function ChatClient() {
                 ))}
               </div>
 
-              <div className={styles.themeSelect}>
-                <select
-                  aria-label="Theme"
-                  value={theme}
-                  onChange={(e) => setTheme(e.target.value as any)}
-                >
-                  <option value="bw">Black & White</option>
-                  <option value="dark">Dark</option>
-                  <option value="light">Light</option>
-                </select>
-              </div>
-
-              <div className={styles.themeSelect}>
-                <select
-                  aria-label="Format"
-                  value={format}
-                  onChange={(e) => setFormat(e.target.value as any)}
-                >
-                  <option value="bubble">Bubble</option>
-                  <option value="compact">Compact</option>
-                  <option value="minimal">Minimal</option>
-                </select>
-              </div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button
+                    aria-label="Open settings"
+                    title="Settings"
+                    onClick={() => setSettingsOpen(true)}
+                    className={styles.sendBtn}
+                    style={{ padding: 8, minWidth: 90 }}
+                  >
+                    Settings
+                  </button>
+                </div>
             </div>
           </header>
 
+          {settingsOpen && (
+            <div className={styles.settingsPanel} role="dialog" aria-modal="true">
+              <div className={styles.settingsInner}>
+                <h3>Settings</h3>
+                <label>
+                  Theme
+                  <select value={theme} onChange={(e) => setTheme(e.target.value as any)}>
+                    <option value="bw">Black & White</option>
+                    <option value="dark">Dark</option>
+                    <option value="light">Light</option>
+                  </select>
+                </label>
+
+                <label>
+                  Accent
+                  <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+                    {Object.entries(colorMap).map(([key, hex]) => (
+                      <button
+                        key={key}
+                        className={styles.swatch}
+                        onClick={() => setColor(hex)}
+                        style={{ background: hex, outline: color === hex ? "2px solid #fff" : "none" }}
+                      />
+                    ))}
+                  </div>
+                </label>
+
+                <label>
+                  Format
+                  <select value={format} onChange={(e) => setFormat(e.target.value as any)}>
+                    <option value="bubble">Bubble</option>
+                    <option value="compact">Compact</option>
+                    <option value="minimal">Minimal</option>
+                  </select>
+                </label>
+
+                <label>
+                  Font
+                  <select value={font} onChange={(e) => setFont(e.target.value)}>
+                    <option value="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial">System</option>
+                    <option value="var(--font-geist-sans)">Geist</option>
+                    <option value="monospace">Monospace</option>
+                    <option value="Georgia, serif">Serif</option>
+                  </select>
+                </label>
+
+                <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                  <button onClick={() => setSettingsOpen(false)} className={styles.sendBtn}>Close</button>
+                </div>
+              </div>
+            </div>
+          )}
           <div className={styles.messages}>
             {messages.map((m) => (
               <div
