@@ -6,6 +6,7 @@
   --muted: #6b6b6b;
   --accent-1: #171717; /* foreground */
   --accent-2: #ffffff; /* inverse */
+  --accent: #2563eb; /* default blue accent */
 }
 
 /* Inline theme helpers for older tooling */
@@ -34,6 +35,7 @@
   --muted: #8a8a8a;
   --accent-1: #ededed;
   --accent-2: #000000;
+  --accent: #2563eb;
 }
 
 [data-theme="light"] {
@@ -42,6 +44,7 @@
   --muted: #6b6b6b;
   --accent-1: #171717;
   --accent-2: #ffffff;
+  --accent: #2563eb;
 }
 
 [data-theme="bw"] {
@@ -50,6 +53,7 @@
   --muted: #8a8a8a;
   --accent-1: #ffffff;
   --accent-2: #000000;
+  --accent: #ffffff;
 }
 
 body {

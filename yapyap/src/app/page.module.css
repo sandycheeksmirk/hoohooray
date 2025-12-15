@@ -166,7 +166,7 @@
 }
 
 .msgMe {
-  background: var(--accent-1);
+  background: var(--accent);
   color: var(--accent-2);
   align-self: flex-end;
   border-radius: 12px 12px 4px 12px;
@@ -205,7 +205,7 @@
 
 .sendBtn {
   padding: 8px 14px;
-  background: var(--accent-1);
+  background: var(--accent);
   color: var(--accent-2);
   border-radius: 999px;
   border: none;
@@ -225,6 +225,30 @@
   padding: 6px 10px;
   border-radius: 8px;
 }
+
+.colorSwatches {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-left: 10px;
+}
+
+.swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid rgba(0,0,0,0.12);
+  cursor: pointer;
+}
+
+/* Format variants */
+[data-format="compact"] .chatItem { padding: 6px; }
+[data-format="compact"] .msg { padding: 6px 8px; max-width: 85%; border-radius: 8px; font-size: 13px; }
+[data-format="compact"] .chatAvatar, [data-format="compact"] .headerAvatar { display: none; }
+
+[data-format="minimal"] .chatItem { padding: 8px; }
+[data-format="minimal"] .msg { background: transparent; border-bottom: 1px solid rgba(0,0,0,0.08); border-radius: 0; }
+
 
 @media (max-width: 900px) {
   .container {
