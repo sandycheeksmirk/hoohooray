@@ -111,8 +111,8 @@ function TicTacToeBoard({ game, user, onMove }: any) {
                         alignItems: 'center',
                         justifyContent: 'center',
                         fontSize: 28,
-                        background: 'rgba(255,255,255,0.02)',
-                        border: '1px solid rgba(255,255,255,0.03)',
+                        background: 'rgba(255,255,255,0.08)',
+                        border: '1px solid rgba(255,255,255,0.15)',
                         cursor: (game.status === 'ongoing' && game.turn === user?.uid && !game.board?.[i]) ? 'pointer' : 'default',
                         color: 'var(--accent-1)'
                     }}
