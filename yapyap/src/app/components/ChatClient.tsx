@@ -16,6 +16,7 @@ import {
   runTransaction,
   getDoc,
   getDocs,
+  arrayUnion,
   where,
 } from "firebase/firestore";
 import { auth, googleProvider } from "../lib/firebase";
@@ -163,7 +164,7 @@ export default function ChatClient() {
   }
 
   const [user, setUser] = useState<{ uid: string; name?: string; photo?: string } | null>(null);
-  const [profile, setProfile] = useState<{ username?: string; name?: string } | null>(null);
+  const [profile, setProfile] = useState<{ username?: string; name?: string; friends?: string[] } | null>(null);
 
   useEffect(() => {
     if (!auth) return;
@@ -227,6 +228,7 @@ export default function ChatClient() {
   const [friendStatus, setFriendStatus] = useState<string | null>(null);
   const [pendingRequests, setPendingRequests] = useState<Array<any>>([]);
   const [addFriendOpen, setAddFriendOpen] = useState(false);
+  const [friendsList, setFriendsList] = useState<Array<{ uid: string; username?: string; name?: string; photo?: string }>>([]);
 
   async function reserveUsername(name: string) {
     if (!user) return setUsernameStatus("Not signed in");
@@ -252,19 +254,19 @@ export default function ChatClient() {
   }
 
   async function addFriendById(id: string) : Promise<boolean> {
-    if (!user) return setFriendStatus("Not signed in");
+    if (!user) { setFriendStatus("Not signed in"); return false; }
     const clean = id.trim().toLowerCase();
-    if (!clean) return setFriendStatus("Enter an ID");
+    if (!clean) { setFriendStatus("Enter an ID"); return false; }
     try {
       const mapping = await getDoc(doc(db, "usernames", clean));
-      if (!mapping.exists()) return setFriendStatus("ID not found");
+      if (!mapping.exists()) { setFriendStatus("ID not found"); return false; }
       const otherUid = (mapping.data() as any).uid as string;
-      if (!otherUid) return setFriendStatus("Invalid user mapping");
-      if (otherUid === user.uid) return setFriendStatus("That's you");
+      if (!otherUid) { setFriendStatus("Invalid user mapping"); return false; }
+      if (otherUid === user.uid) { setFriendStatus("That's you"); return false; }
       // send a friend request instead of auto-creating a chat
       const requestsQ = query(collection(db, "friendRequests"), where("fromUid", "==", user.uid), where("toUid", "==", otherUid), where("status", "==", "pending"));
       const existing = await getDocs(requestsQ);
-      if (!existing.empty) return setFriendStatus("Request already pending");
+      if (!existing.empty) { setFriendStatus("Request already pending"); return false; }
 
       await addDoc(collection(db, "friendRequests"), {
         fromUid: user.uid,
@@ -275,6 +277,12 @@ export default function ChatClient() {
         createdAt: serverTimestamp(),
       });
       setFriendStatus("Request sent");
+      // optionally add to outgoing requests list on our user doc
+      try {
+        await updateDoc(doc(db, "users", user.uid), { outgoingRequests: arrayUnion(otherUid) } as any);
+      } catch (e) {
+        /* non-fatal */
+      }
       return true;
     } catch (e) {
       console.error(e);
@@ -295,6 +303,29 @@ export default function ChatClient() {
     });
     return () => unsub();
   }, [user?.uid]);
+
+  // load friends list (fetch user docs listed in profile.friends)
+  useEffect(() => {
+    async function loadFriends() {
+      const f = (profile as any)?.friends as string[] | undefined;
+      if (!f || f.length === 0) {
+        setFriendsList([]);
+        return;
+      }
+      try {
+        const docs = await Promise.all(f.map((uid) => getDoc(doc(db, "users", uid))));
+        setFriendsList(
+          docs
+            .filter((d) => d.exists())
+            .map((d) => ({ uid: d.id, ...(d.data() as any) }))
+        );
+      } catch (e) {
+        console.error("Error loading friends", e);
+        setFriendsList([]);
+      }
+    }
+    loadFriends();
+  }, [profile?.friends]);
 
   // open notifications when new friend requests arrive
   useEffect(() => {
@@ -319,13 +350,34 @@ export default function ChatClient() {
           updatedAt: serverTimestamp(),
         });
       }
+      // mark request accepted
       await updateDoc(doc(db, "friendRequests", req.id), { status: "accepted", respondedAt: serverTimestamp() });
+      // add each other to friends lists
+      await updateDoc(doc(db, "users", user!.uid), { friends: arrayUnion(otherUid) } as any);
+      await updateDoc(doc(db, "users", otherUid), { friends: arrayUnion(user!.uid) } as any);
       setFriendStatus("Friend request accepted");
       setSelected(chatId);
     } catch (e) {
       console.error(e);
       setFriendStatus("Error accepting request");
     }
+  }
+
+  async function openDM(otherUid: string, otherLabel?: string) {
+    if (!user) return;
+    const ids = [user.uid, otherUid].sort();
+    const chatId = `dm_${ids[0]}_${ids[1]}`;
+    const chatRef = doc(db, "chats", chatId);
+    const chatSnap = await getDoc(chatRef);
+    if (!chatSnap.exists()) {
+      await setDoc(chatRef, {
+        members: [user.uid, otherUid],
+        name: `DM: ${otherLabel || otherUid}`,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    }
+    setSelected(chatId);
   }
 
   async function declineRequest(req: any) {
@@ -452,6 +504,29 @@ export default function ChatClient() {
             <input placeholder="Search" />
           </div>
 
+          <div style={{ padding: 10, borderBottom: "1px solid rgba(0,0,0,0.06)" }}>
+            <div style={{ fontWeight: 700, marginBottom: 8 }}>Friends</div>
+            <ul style={{ padding: 0, margin: 0, listStyle: "none" }}>
+              {friendsList.length === 0 ? (
+                <li style={{ fontSize: 13, color: "var(--muted)" }}>No friends yet</li>
+              ) : (
+                friendsList.map((f) => (
+                  <li key={f.uid} className={styles.chatItem} style={{ cursor: "pointer" }} onClick={() => openDM(f.uid, f.username || f.name || f.uid)}>
+                    <div style={{ display: "flex", gap: 10, alignItems: "center", width: "100%" }}>                    {f.photo ? (
+                      <img src={f.photo} alt={f.username || f.name || "avatar"} style={{ width: 44, height: 44, borderRadius: 22, objectFit: "cover" }} />
+                    ) : (
+                      <div className={styles.chatAvatar} />
+                    )}                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 600 }}>{f.username || f.name || f.uid}</div>
+                        {f.name && <div style={{ fontSize: 12, color: "var(--muted)" }}>{f.name}</div>}
+                      </div>
+                    </div>
+                  </li>
+                ))
+              )}
+            </ul>
+          </div>
+
           <ul className={styles.chatList}>
             {chats.map((c) => (
               <li
@@ -475,13 +550,39 @@ export default function ChatClient() {
 
         <section className={styles.chatArea}>
           <header className={styles.chatHeader}>
-            <div className={styles.headerAvatar} />
-            <div className={styles.headerMeta}>
-              <div className={styles.headerName}>
-                {chats.find((c) => c.id === selected)?.name || "No chat selected"}
-              </div>
-              <div className={styles.headerStatus}>online</div>
-            </div>
+            {
+              (() => {
+                const chat = chats.find((c) => c.id === selected);
+                if (chat && chat.members && user && chat.members.length === 2) {
+                  const other = chat.members.find((m) => m !== user.uid)!;
+                  const friend = friendsList.find((f) => f.uid === other);
+                  const label = chat.name || (friend?.username || friend?.name || other);
+                  return (
+                    <>
+                      {friend?.photo ? (
+                        <img src={friend.photo} alt={label} style={{ width: 44, height: 44, borderRadius: 22, objectFit: "cover" }} />
+                      ) : (
+                        <div className={styles.headerAvatar} />
+                      )}
+                      <div className={styles.headerMeta}>
+                        <div className={styles.headerName}>{label}</div>
+                        <div className={styles.headerStatus}>online</div>
+                      </div>
+                    </>
+                  );
+                }
+                return (
+                  <>
+                    <div className={styles.headerAvatar} />
+                    <div className={styles.headerMeta}>
+                      <div className={styles.headerName}>{chats.find((c) => c.id === selected)?.name || "No chat selected"}</div>
+                      <div className={styles.headerStatus}>online</div>
+                    </div>
+                  </>
+                );
+              })()
+            }
+
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <button
                 aria-label="Notifications"
@@ -606,6 +707,23 @@ export default function ChatClient() {
               </div>
             </div>
           )}
+
+          {addFriendOpen && (
+            <div className={styles.settingsPanel} role="dialog" aria-modal="true" style={{ right: 140 }}>
+              <div className={styles.settingsInner}>
+                <h3>Add Friend</h3>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <input placeholder="friend-id" value={friendId} onChange={(e) => setFriendId(e.target.value)} />
+                  <button className={styles.sendBtn} onClick={async () => { const ok = await addFriendById(friendId); if (ok) { setAddFriendOpen(false); setFriendId(""); } }}>Send Request</button>
+                </div>
+                {friendStatus && <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 6 }}>{friendStatus}</div>}
+                <div style={{ marginTop: 8, display: "flex", gap: 8 }}>
+                  <button className={styles.sendBtn} onClick={() => setAddFriendOpen(false)}>Close</button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {notificationsOpen && (
             <div className={styles.notificationPanel} role="dialog" aria-modal="true">
               <div className={styles.notificationInner}>
