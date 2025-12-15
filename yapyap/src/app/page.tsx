@@ -1,6 +1,6 @@
 'use client'
-import ChatClient from "./components/ChatClient";
+import SignIn from "./components/SignIn";
 
 export default function Page() {
-  return <ChatClient />;
+  return <SignIn />;
 }
